@@ -58,11 +58,11 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
 
     # Select channels and fit transit + spots
     expchan = np.arange(40, 70, 10)
-    transit_fit.transit_spectro(pardict, expchan)
+    #transit_fit.transit_spectro(pardict, expchan)
 
     # Fit derived transit depth rise with stellar models
     spectra_fit.read_res(pardict, expchan, pardict['chains_folder'] \
-                       + 'contrast_plot_kurucz.pdf')
+                       + 'contrast_plot_')
 
     return
 

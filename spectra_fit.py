@@ -36,9 +36,6 @@ def read_res(pardict, ind, plotname):
     plt.figure()
     plt.errorbar(wl, sigma[:, 2], yerr=sigma[:, 2] - sigma[:, 0], fmt='ko')
     plt.title('$\sigma$', fontsize=16)
-    plt.figure()
-    plt.errorbar(wl, A[:, 2], yerr=yerr, fmt = 'ko')
-    plt.title('$A$', fontsize=16)
     #plt.xlabel('Channel', fontsize=16)
     #plt.ylabel('Flux rise [ppm]', fontsize=16)
     '''
@@ -50,22 +47,38 @@ def read_res(pardict, ind, plotname):
     plt.title('$\sigma$', fontsize=16)
     '''
 
-    # Get spectra with starspot contamination and perform LM fit
-    for temp in np.arange(4000, 6000, 250):
-        ww, spec = combine_spectra(pardict, [temp], 0.05)
-        ww/= 1e4
-        spec*= A[:, 2].max()
-        specint = interp1d(ww, spec)
-        specA = specint(wl)
-        soln = least_squares(scalespec, 1., args=(specA, A[:, 2], yerr))
-        print('Spectrum scaling factor:', soln.x[0])
-        plt.plot(ww, soln.x*spec, label=str(temp))
-    plt.legend(frameon=False, loc='best', fontsize=16)
-    plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
-    plt.ylabel('Transit depth rise [ppm]', fontsize=16)
-    plt.xlim(0.3, 5.0)
-    plt.show()
-    plt.savefig(plotname)
+    # Try with different stellar models and find best Tspot fit
+    for stmod in ['ck04models', 'k93models', 'phoenix']:
+        tspot_ = np.arange(4000, 6000, 200)
+        chi2 = np.zeros(len(tspot_))
+        plt.figure()
+        plt.errorbar(wl, A[:, 2], yerr=yerr, fmt = 'ko')
+        plt.title('$A$', fontsize=16)
+        print('Fitting ' + stmod + ' models...')
+        # Get spectra with starspot contamination and perform LM fit
+        for i, temp in enumerate(tspot_):
+            ww, spec = combine_spectra(pardict, [temp], 0.05, stmod)
+            ww/= 1e4
+            spec*= A[:, 2].max()
+            specint = interp1d(ww, spec)
+            specA = specint(wl)
+            soln = least_squares(scalespec, 1., args=(specA, A[:, 2], yerr))
+            print('Spectrum scaling factor:', soln.x[0])
+            plt.plot(ww, soln.x*spec, label=str(temp))
+            chi2[i] = np.sum((A[:, 2] - soln.x*specA)**2/yerr**2)
+        plt.legend(frameon=False, loc='best', fontsize=16)
+        plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
+        plt.ylabel('Transit depth rise [ppm]', fontsize=16)
+        plt.xlim(0.5, 3.5)
+        plt.ylim(-200, 4000)
+        chi2min = np.argmin(chi2)
+        print('chi2 min = ', chi2[chi2min])
+        plt.title(stmod + r', $\min (\chi^2)=$' \
+                + str(np.round(chi2[chi2min], 2)) \
+                + r', $T_\mathrm{spot}=$' + str(tspot_[chi2min]), fontsize=16)
+        plt.show()
+        plt.savefig(plotname + stmod + '.pdf')
+        plt.close('all')
 
     return np.array(wl), np.array(A), np.array(x0), np.array(sigma)
 
@@ -75,7 +88,7 @@ def scalespec(x, spec, y, yerr):
     '''
     return (x*spec - y)**2/yerr**2
 
-def combine_spectra(pardict, tspot, ffact, res=100.):
+def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
     '''
     Combines starspot and stellar spectrum.
     Fit with Kurucz instead of Phoenix models 2/10/19
@@ -86,11 +99,11 @@ def combine_spectra(pardict, tspot, ffact, res=100.):
     '''
 
     # This is in Angstroms
-    wave = pysynphot.Icat('k93models', pardict['tstar'], 0.0, \
+    wave = pysynphot.Icat(stmodel, pardict['tstar'], 0.0, \
                 pardict['loggstar']).wave
     # Reduce resolution
     wnew = rebin.rebin_wave(wave, res)
-    star = pysynphot.Icat('k93models', pardict['tstar'], 0.0, \
+    star = pysynphot.Icat(stmodel, pardict['tstar'], 0.0, \
                 pardict['loggstar']).flux
     rebstar, errstar = rebin.rebin_spectrum(star, wave, wnew)
     # Increase errors (based on ETC?)
@@ -99,7 +112,7 @@ def combine_spectra(pardict, tspot, ffact, res=100.):
     #plt.errorbar(wnew/10., rebstar, yerr=errstar, label=str(tstar))
 
     for i in tspot:
-        spot = pysynphot.Icat('k93models', i, 0.0, pardict['loggstar']).flux
+        spot = pysynphot.Icat(stmodel, i, 0.0, pardict['loggstar']).flux
         specnew = spot#(1 - ffact)*star + ffact*spot
         rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
         errnew += rebnew*abs(np.random.normal(loc=0., scale=5.5e-3,\
