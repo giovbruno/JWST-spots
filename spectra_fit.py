@@ -1,13 +1,14 @@
-# Compare spot fits with stellar stellar models.
+# Compare spot fits with stellar models.
+
 import numpy as np
-import glob
-import pickle
-from pdb import set_trace
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.optimize import least_squares
+import rebin
 import pysynphot
-import plot_spectra
+import glob
+import pickle
+from pdb import set_trace
 
 def read_res(pardict, ind, plotname):
     '''
@@ -50,15 +51,14 @@ def read_res(pardict, ind, plotname):
     '''
 
     # Get spectra with starspot contamination and perform LM fit
-    for temp in np.arange(3000, 6000, 250):
-        ww, spec = plot_spectra.combine_spectra(pardict, [temp], 0.05)
+    for temp in np.arange(4000, 6000, 250):
+        ww, spec = combine_spectra(pardict, [temp], 0.05)
         ww/= 1e4
         spec*= A[:, 2].max()
         specint = interp1d(ww, spec)
         specA = specint(wl)
-        soln = least_squares(scalespec, 1., args=(specA, \
-                            A[:, 2], yerr))
-        print('Spectrum scaling factor:', soln.x)
+        soln = least_squares(scalespec, 1., args=(specA, A[:, 2], yerr))
+        print('Spectrum scaling factor:', soln.x[0])
         plt.plot(ww, soln.x*spec, label=str(temp))
     plt.legend(frameon=False, loc='best', fontsize=16)
     plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
@@ -74,3 +74,55 @@ def scalespec(x, spec, y, yerr):
     Distance between model spectrum and data.
     '''
     return (x*spec - y)**2/yerr**2
+
+def combine_spectra(pardict, tspot, ffact, res=100.):
+    '''
+    Combines starspot and stellar spectrum.
+    Fit with Kurucz instead of Phoenix models 2/10/19
+
+    Input
+    -----
+    tspot: list (of effective temperatures)
+    '''
+
+    # This is in Angstroms
+    wave = pysynphot.Icat('k93models', pardict['tstar'], 0.0, \
+                pardict['loggstar']).wave
+    # Reduce resolution
+    wnew = rebin.rebin_wave(wave, res)
+    star = pysynphot.Icat('k93models', pardict['tstar'], 0.0, \
+                pardict['loggstar']).flux
+    rebstar, errstar = rebin.rebin_spectrum(star, wave, wnew)
+    # Increase errors (based on ETC?)
+    errstar += rebstar*abs(np.random.normal(loc=0., scale=5.5e-3, \
+                            size=len(errstar)))
+    #plt.errorbar(wnew/10., rebstar, yerr=errstar, label=str(tstar))
+
+    for i in tspot:
+        spot = pysynphot.Icat('k93models', i, 0.0, pardict['loggstar']).flux
+        specnew = spot#(1 - ffact)*star + ffact*spot
+        rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
+        errnew += rebnew*abs(np.random.normal(loc=0., scale=5.5e-3,\
+                        size=len(errnew)))
+        # Compare plots
+        #plt.errorbar(wnew/10., rebnew, yerr=errnew, label=str(i))
+        # As Sing+2011
+        wref = np.logical_and(39000 < wnew, wnew < 41000)
+        spotref = rebnew[wref]
+        starref = rebstar[wref]
+        fref = 1. - np.mean(spotref/starref)
+        rise = (1. - rebnew/rebstar)/fref
+        '''
+        plt.errorbar(wnew/1e4, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
+                        + str(i) + 'K')
+
+    plt.legend(frameon=False)
+    plt.title('Stellar spectrum: ' + str(tstar) + ' K', fontsize=16)
+    #plt.plot([0.719, 0.719], [0.5, 9.5], 'k--')
+    plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
+    plt.ylabel('Dimming factor', fontsize=16)
+    plt.show()
+    '''
+    flag = np.logical_or(np.isnan(wnew), np.isnan(rise))
+
+    return wnew[~flag], rise[~flag]

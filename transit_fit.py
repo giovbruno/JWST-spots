@@ -40,8 +40,7 @@ def transit_spectro(pardict, expchan):
     wm, ua, eua, ub, eub = np.loadtxt(pardict['ldfile'], unpack=True, \
                         skiprows=3)
 
-    # Band-integrated transit
-    # files in the data folder
+    # Band-integrated transit files in the data folder
     ll = len(glob.glob(pardict['data_folder'] + 'transits_spots*.pic'))
     #ll = len(wm) - 1
     whiteleft = wm.min() - np.diff(wm)[0]/2.
@@ -50,15 +49,12 @@ def transit_spectro(pardict, expchan):
                     + str(ua[-1]) + '-' + str(ub[-1]), logger)
     global ldw
     ldw = [ua[-1], ub[-1]]
-    # To save results
+    # Save results
     diz_res = {}
     for i in expchan:
         samples_blue, spot1 = transit_emcee(pardict, logger, int(i))
         diz_res[i] = spot1
     printlog('White light curve fit - OK', logger)
-
-    #correct_spectro(pardict)
-    #mcmc_spectro(pardict, logger)
 
     filespot = open(pardict['chains_folder'] + '/spots_signal.p', 'wb')
     pickle.dump(diz_res, filespot)
@@ -94,10 +90,6 @@ def transit_emcee(diz, logger, ind):
 
     flag = np.logical_and(t > flagext[0], t < flagext[1])
     datasav = [t.copy(), y.copy(), yerr.copy()]
-    #t, y, yerr = t[~flag], y[~flag], yerr[~flag]
-    #plt.errorbar(t, y, yerr = yerr, fmt = 'k.')
-    #plt.show()
-    #set_trace()
 
     bounds_model = []
     bounds_model.append((0.01, 0.2))
@@ -109,15 +101,10 @@ def transit_emcee(diz, logger, ind):
     bounds_model.append((-1., 1.))
     bounds_model.append((-1., 1.))
     bounds_model.append((-1,  1.))
-    #bounds_model.append((-1., 1.))
-    #bounds_model.append((-1., 1.))
     bounds_model.append((0.95, 1.05))
     bounds_model.append((1e-6, 1e-2)) # A
     bounds_model.append((0.07, 0.09)) # x0
     bounds_model.append((1e-6, 1e-2)) # sigma
-    #liminf = [0.01, 0.08, 6., 85., 0.01, 0.01, -1., -1., -1., -1., -1., 0.5]
-    #limsup = [0.2,  0.12, 9., 90., 0.99, 0.99,  1.,  1.,  1.,  1.,  1., 1.5]
-    #bounds = (liminf, limsup)
 
     kr, t0, aR, i, ua, ub, r0, r1, r2, C = 0.10, 0.08, 8., \
             88., ldw[0], ldw[1], -1e-3, 1e-4, -1e-4, 1.
@@ -129,11 +116,9 @@ def transit_emcee(diz, logger, ind):
     nll = lambda *args: -lnlike_white(*args)
     soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
                     args=(t, y, yerr), bounds=bounds_model, options=options)
-    #               method = 'Nelder-Mead', bounds=bounds_model, \
-    #                args=(t, y, yerr), options=options)
 
     print('Likelihood maximimazion results:')
-    print(soln)
+    #print(soln)
 
     # Initial error on parameters (prior)
     initial_err = np.copy(ierrw)
