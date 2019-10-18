@@ -4,13 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.optimize import least_squares
+import get_uncertainties as getunc
 import rebin
 import pysynphot
 import glob
 import pickle
 from pdb import set_trace
 
-def read_res(pardict, ind, plotname):
+def read_res(pardict, ind, instrument, plotname, resfile):
     '''
     Read in the chains files and initialize arrays with spot properties.
     '''
@@ -26,17 +27,19 @@ def read_res(pardict, ind, plotname):
     A = np.vstack(A)
     x0 = np.vstack(x0)
     sigma = np.vstack(sigma)
-    yerr = []
+    yerrup, yerrdown = [], []
     for i in np.arange(len(A[:, 2])):
-        if A[i, 1] > 0:
-            yerr.append(max(abs(A[i, 2] - A[i, 1]), abs(A[i, 3] - A[i, 2])))
-        else:
-            yerr.append(abs(A[i, 3] - A[i, 2]))
-    yerr = np.array(yerr)
+        #if A[i, 1] > 0:
+        #    yerr.append(max(abs(A[i, 2] - A[i, 1]), abs(A[i, 3] - A[i, 2])))
+        #else:
+        #    yerr.append(abs(A[i, 3] - A[i, 2]))
+        yerrup.append(A[i, 3] - A[i, 2])
+        yerrdown.append(A[i, 2] - A[i, 1])
+    #yerr = np.array(yerr)
     plt.figure()
     plt.errorbar(wl, sigma[:, 2], yerr=sigma[:, 2] - sigma[:, 0], fmt='ko')
     plt.title('$\sigma$', fontsize=16)
-    #plt.xlabel('Channel', fontsize=16)
+    plt.xlabel('Channel', fontsize=16)
     #plt.ylabel('Flux rise [ppm]', fontsize=16)
     '''
     plt.figure()
@@ -47,38 +50,57 @@ def read_res(pardict, ind, plotname):
     plt.title('$\sigma$', fontsize=16)
     '''
 
+    dict_results = {}
     # Try with different stellar models and find best Tspot fit
-    for stmod in ['ck04models', 'k93models', 'phoenix']:
-        tspot_ = np.arange(4000, 6000, 200)
-        chi2 = np.zeros(len(tspot_))
+    for stmod in ['k93models', 'phoenix']:#, 'ck04models']:
+        dict_results[stmod] = {}
+        tspot_ = np.arange(3500, 6000, 100)
+        chi2red = np.zeros(len(tspot_)) + np.inf
         plt.figure()
-        plt.errorbar(wl, A[:, 2], yerr=yerr, fmt = 'ko')
+        plt.errorbar(wl, A[:, 2], yerr=[yerrup, yerrdown], fmt='ko')
         plt.title('$A$', fontsize=16)
         print('Fitting ' + stmod + ' models...')
         # Get spectra with starspot contamination and perform LM fit
         for i, temp in enumerate(tspot_):
+            if temp == pardict['tstar']:
+                continue
             ww, spec = combine_spectra(pardict, [temp], 0.05, stmod)
             ww/= 1e4
             spec*= A[:, 2].max()
             specint = interp1d(ww, spec)
             specA = specint(wl)
-            soln = least_squares(scalespec, 1., args=(specA, A[:, 2], yerr))
-            print('Spectrum scaling factor:', soln.x[0])
+            # Use max uncertainty between yerrup and yerrdown
+            yerrfit = []
+            for j in np.arange(len(yerrup)):
+                yerrfit.append(max([yerrup[j], yerrdown[j]]))
+            yerrfit = np.array(yerrfit)
+            soln = least_squares(scalespec, 1., args=(specA, A[:, 2], yerrfit))
+            scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
+            print(temp, 'K Spectrum scaling factor:', soln.x[0], '+/-', \
+                                scale_unc[0])
             plt.plot(ww, soln.x*spec, label=str(temp))
-            chi2[i] = np.sum((A[:, 2] - soln.x*specA)**2/yerr**2)
+            chi2red[i] = np.sum((A[:, 2] - soln.x*specA)**2/yerrfit**2) \
+                            /(len(yerrfit) - 1)
+            dict_results[stmod][temp] = chi2red
+
         plt.legend(frameon=False, loc='best', fontsize=16)
         plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
         plt.ylabel('Transit depth rise [ppm]', fontsize=16)
         plt.xlim(0.5, 3.5)
         plt.ylim(-200, 4000)
-        chi2min = np.argmin(chi2)
-        print('chi2 min = ', chi2[chi2min])
-        plt.title(stmod + r', $\min (\chi^2)=$' \
-                + str(np.round(chi2[chi2min], 2)) \
+        chi2min = np.argmin(chi2red)
+        print('chi2 min =', chi2red[chi2min], 'with Tspot =', \
+                                    tspot_[chi2min], 'K')
+        plt.title(stmod + r', $\min (\tilde{\chi}^2)=$' \
+                + str(np.round(chi2red[chi2min], 2)) \
                 + r', $T_\mathrm{spot}=$' + str(tspot_[chi2min]), fontsize=16)
         plt.show()
-        plt.savefig(plotname + stmod + '.pdf')
+        plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
         plt.close('all')
+
+    fresults = open(resfile, 'wb')
+    pickle.dump(dict_results, fresults)
+    fresults.close()
 
     return np.array(wl), np.array(A), np.array(x0), np.array(sigma)
 
@@ -139,3 +161,53 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
     flag = np.logical_or(np.isnan(wnew), np.isnan(rise))
 
     return wnew[~flag], rise[~flag]
+
+def plot_precision(pardict, xaxis, deltapar):
+    '''
+    Plot starspot parameter precision as a function of some simulation
+    parameter.
+
+    Deltapar is used for the final plot label.
+    '''
+
+    resfolder = pardict['project_folder'] \
+                + pardict['instrument'] + 'p' + str(pardict['rplanet']) \
+                + '_star' + str(pardict['rstar']) + '_' \
+                + str(pardict['tstar']) + '_' + str(pardict['loggstar']) \
+                + '_spot' + str(pardict['tumbra']) + '_' \
+                + str(pardict['tpenumbra']) + '_mag'
+
+    plt.figure(figsize=(8, 7))
+    # Take the min chi2 value for each stellar model, then get stddev
+    diff_spotpar = []
+    std_spotpar = []
+    for j, xpar in enumerate(xaxis):
+        chi2results = pickle.load(open(resfolder + str(xpar) + \
+                    '/MCMC/contrast_res.pic', 'rb'))
+        tmin, chi2min = [], []
+        for stmod in ['k93models', 'phoenix']:#, 'ck04models']:
+            t, chi2 = [], []
+            for it in chi2results[stmod].items():
+                t.append(it[0])
+                chi2.append(it[1])
+            chi2 = np.array(chi2)
+            t = np.array(t)
+            ind = chi2.argmin()
+            tmin.append(t[ind])
+            chi2min.append(chi2[ind])
+        diff_spotpar.append(abs(pardict['tumbra'] - np.mean(tmin)))
+        # Largest sunspot temp - min with different starspot models
+        std_spotpar.append(max(tmin) - min(tmin))
+        plt.errorbar([xpar], diff_spotpar[j], yerr=std_spotpar[j], \
+                            fmt='ko', ms=10, mfc='white', capsize=2)
+    # Polynomial fit
+    fit = np.polyfit(np.array(xaxis), np.array(diff_spotpar), 2, \
+                        w=1./np.array(std_spotpar))
+    fun = np.polyval(fit, xaxis)
+    plt.plot(xaxis, fun, 'r--', ms=2)
+    plt.xlabel(deltapar, fontsize=16)
+    plt.ylabel('$|T_\mathrm{spot, mod} - T_\mathrm{spot, meas}$|', fontsize=16)
+    plt.show()
+    plt.savefig(resfolder + str(xpar) + '/MCMC/diff_' + deltapar + '.pdf')
+
+    return

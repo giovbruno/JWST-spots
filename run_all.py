@@ -29,7 +29,8 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
     pardict['chains_folder']  = pardict['case_folder'] + 'MCMC/'
     if not os.path.exists(pardict['chains_folder']):
         os.mkdir(pardict['chains_folder'])
-    pardict['pandexo_out'] = pardict['data_folder'] + 'singlerun.p'
+    pardict['pandexo_out_jwst'] = pardict['data_folder'] + 'singlerun_jwst.p'
+    pardict['pandexo_out_hst'] = pardict['data_folder'] + 'singlerun_hst.p'
     pardict['logfile_data'] = pardict['data_folder'] + 'logfile.log'
     pardict['logfile_chains'] = pardict['chains_folder'] + 'logfile.log'
     pardict['ldfile'] = pardict['project_folder'] \
@@ -43,7 +44,10 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
     pardict['tpenumbra'] = tpenumbra
     pardict['loggstar'] = loggstar
     pardict['rplanet'] = rplanet
+    pardict['planettype'] = 'constant'
 
+    expchan = np.arange(10, 70, 10)
+    '''
     # Check
     if pathlib.Path(pardict['logfile_data']).exists() or \
     pathlib.Path(pardict['logfile_chains']).exists():
@@ -52,19 +56,26 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
         os.system('rm ' + pardict['logfile_data'])
         os.system('rm ' + pardict['logfile_chains'])
 
-    #simulate_transit.generate_spectrum(pardict)
-    #simulate_transit.add_spots(pardict, 20)
-    #neptune_mdwarf.channelmerge(pardict, 3, 33)
+    # Run process for JWST
+    simulate_transit.generate_spectrum_jwst(pardict)
+    simulate_transit.add_spots(pardict, 'jwst')
 
     # Select channels and fit transit + spots
-    expchan = np.arange(40, 70, 10)
-    #transit_fit.transit_spectro(pardict, expchan)
-
+    transit_fit.transit_spectro(pardict, expchan, 'jwst')
+    '''
     # Fit derived transit depth rise with stellar models
-    spectra_fit.read_res(pardict, expchan, pardict['chains_folder'] \
-                       + 'contrast_plot_')
+    spectra_fit.read_res(pardict, expchan, 'jwst', pardict['chains_folder'] \
+        + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res.pic')
 
-    return
+    # Now, for HST - requires ramp calculation but it's missing in the tutorials
+    #simulate_transit.generate_spectrum_hst(pardict)
+    #simulate_transit.add_spots(pardict, 'hst')
+    #expchan = np.arange(15)
+    #transit_fit.transit_spectro(pardict, expchan, 'hst')
+    #spectra_fit.read_res(pardict, expchan, 'hst', pardict['chains_folder'] \
+    #                   + 'contrast_plot_')
+
+    return pardict
 
     # Then, spot models
         #spotmodels_IC.transit_spectro(pardict)
@@ -88,3 +99,20 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
     #comparisons.plot_contrasts(folder_root + 'case1_spots/')
     #comparisons.plot_spectra([folder_root + 'case1_masked/', folder_root \
     #           + 'case1_spots/'], ['masked', 'spots'])
+
+def cycle():
+    '''
+    Run the simulations for several scenarios.
+    '''
+    #mags = np.concatenate((np.arange(9., 13., 0.5), np.arange(15., 16., 0.5)))
+    #for mag in mags:
+    #    pardict = go(mag, 1., 5700, 5000, 5500, 4.5, 1., 'NIRSpec_Prism')
+    tumbras = [-1300, -1000, -600, -300]
+    for td in tumbras:
+        pardict = go(10, 1., 5000, 5000 + td , 5500, 4.5, 1., 'NIRSpec_Prism')
+    #for mag in mags:
+    #    pardict = go(mag, 1., 4000, 3500, 5500, 4.5, 1., 'NIRSpec_Prism')
+
+    spectra_fit.plot_precision(pardict, tumbras, '$T_\star - T_\mathrm{spot}')
+
+    return

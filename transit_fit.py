@@ -28,7 +28,7 @@ ierrw = np.array([1e-1, 1e-1, 1.0, 1.0, 0.5, 0.5, 1., 1., 1., 0.05, 1e-1, \
 ierrs = np.array([1e-3, 0.1, 0.1, 1., 0.05])
 
 # For all spectral bands
-def transit_spectro(pardict, expchan):
+def transit_spectro(pardict, expchan, instrument):
 
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
@@ -65,8 +65,8 @@ def transit_emcee(diz, logger, ind):
 
     plt.close('all')
     os.system('mkdir ' + diz['chains_folder'])
-    lcfile = open(diz['data_folder'] + 'transit_spots' + str(ind) \
-                    + '.pic', 'rb')
+    lcfile = open(diz['data_folder'] + 'transit_spots_' + str(ind) \
+                    + '_jwst.pic', 'rb')
     lc = pickle.load(lcfile)
     lcfile.close()
     t, y, yerr, wl = lc
@@ -75,7 +75,7 @@ def transit_emcee(diz, logger, ind):
     # Add systematics and save for common mode correction
     # (noise calculated from PANDEXO)
     # - For computing errors
-    spec_obs = pickle.load(open(diz['pandexo_out'], 'rb'))
+    spec_obs = pickle.load(open(diz['pandexo_out_jwst'], 'rb'))
     #scale = np.mean(spec_obs[2])/(len(spec_obs[2])**0.5)
     y, yerr = add_rnoise(y, t, np.mean(yerr), psyst)
     yerr /= y.max()

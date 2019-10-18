@@ -14,7 +14,7 @@ import pysynphot
 import pickle, os
 from pdb import set_trace
 
-def generate_spectrum(pardict):
+def generate_spectrum_jwst(pardict):
 
     print('TO ADD: 3D STELLAR MODELS FOR FGK STARS (NOT M)')
 
@@ -41,8 +41,7 @@ def generate_spectrum(pardict):
     exo_dict['star']['radius'] = pardict['rstar']
     exo_dict['star']['r_unit'] = 'R_sun'
 
-    exo_dict['planet']['type'] = 'constant'
-    #exo_dict['planet']['exopath'] = pardict['data_folder'] + 'exotransmit.dat'
+    exo_dict['planet']['type'] = pardict['planettype']
     exo_dict['planet']['w_unit'] = 'um'
     exo_dict['planet']['radius'] = pardict['rplanet'] #other options include
                                                       #"um","nm" ,"Angs",
@@ -57,9 +56,9 @@ def generate_spectrum(pardict):
     #inst_dict["configuration"]["detector"]["subarray"] = 'sub512'
     #inst_dict["configuration"]["detector"]["readmode"] = 'nrs'
 
-    print('Starting TEST run')
+    print('Starting PandExo run for JWST')
     jdi.run_pandexo(exo_dict, ['NIRSpec Prism'], save_file=True, \
-            output_file=pardict['pandexo_out'])
+            output_file=pardict['pandexo_out_jwst'])
     '''
     # Load in output from run
     out = pickle.load(open(pardict['pandexo_out'],'rb'))
@@ -87,7 +86,71 @@ def generate_spectrum(pardict):
     '''
     return #relsigma
 
-def add_spots(pardict, res):
+def generate_spectrum_hst(pardict):
+
+    exo_dict = jdi.load_exo_dict()
+    exo_dict['star']['jmag'] = pardict['magstar']
+    exo_dict['star']['hmag'] = pardict['magstar']
+    exo_dict['planet']['type'] = pardict['planettype']
+    #exo_dict['planet']['exopath'] = 'WASP43b-Eclipse_Spectrum.txt' # filename for model spectrum
+    exo_dict['planet']['w_unit'] = 'um'
+    exo_dict['planet']['f_unit'] = 'fp/f*'
+    exo_dict['planet']['depth'] = (pardict['rplanet']/pardict['rstar'])**2
+    exo_dict['planet']['i'] = 88. # Orbital inclination in degrees
+    exo_dict['planet']['ars'] = 7.38 # a/R*
+    exo_dict['planet']['period'] = 2.0  # Orbital period in days
+    exo_dict['planet']['transit_duration']= 2./24 #transit duration in days
+    exo_dict['planet']['w'] = 90 #(optional) longitude of periastron. Default is 90
+    exo_dict['planet']['ecc'] = 0 #(optional) eccentricity. Default is 0
+
+    inst_dict = jdi.load_mode_dict('WFC3 G141')
+
+    exo_dict['observation']['noccultations'] = 5 # Number of transits/eclipses
+    inst_dict['configuration']['detector']['subarray'] = 'GRISM256'   # GRISM256 or GRISM512
+    inst_dict['configuration']['detector']['nsamp'] = 'optimal' # WFC3 N_SAMP, 1..15
+    inst_dict['configuration']['detector']['samp_seq'] = 'optimal'  # WFC3 SAMP_SEQ, SPARS5 or SPARS10
+    inst_dict['strategy']['norbits'] = 4 # Number of HST orbits
+    inst_dict['strategy']['nchan'] = 15 # Number of spectrophotometric channels
+    inst_dict['strategy']['scanDirection'] = 'Forward'  # Spatial scan direction, Forward or Round Trip
+    inst_dict['strategy']['schedulability'] = 30 # 30 for small/medium program, 100 for large program
+    inst_dict['strategy']['windowSize'] = 20 # (optional) Observation start window size in minutes. Default is 20 minutes.
+    inst_dict['strategy']['calculateRamp'] = False
+
+    jdi.run_pandexo(exo_dict, inst_dict, param_space=0, param_range=0, \
+                    save_file=True, output_file=pardict['pandexo_out_jwst'])
+
+    return
+
+def read_pandexo_results(pardict, instrument, res=20):
+    '''
+    Used for both HST and JWST simulations.
+
+    res: resolution for JWST observations.
+    '''
+
+    if instrument == 'jwst':
+        spec_obs = pickle.load(open(pardict['pandexo_out_jwst'], 'rb'))
+        xobs, yobs, yobs_err = jpi.jwst_1d_spec(spec_obs, R=res, \
+                    num_tran=3, model=False, plot=False)
+    elif instrument == 'hst':
+        xobs, yobs, yobs_err, modelwave, modelspec \
+                        = jpi.hst_spec(pardict['pandexo_out_hst'], plot=False)
+
+    xobs = np.array(xobs)[0]
+    yobs = np.array(yobs)[0]
+    yobs_err = np.array(yobs_err)[0]
+    plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o')
+    plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
+    plt.ylabel('Transit depth', fontsize=16)
+    plt.title('Transmission spectrum output from PandExo', fontsize=16)
+    plt.show()
+    plt.savefig(pardict['data_folder'] + 'spec_model_' + instrument + '.pdf')
+    #set_trace()
+    plt.close('all')
+    
+    return xobs, yobs, yobs_err
+
+def add_spots(pardict, instrument):
 
     # To implement
     print('TO ADD: TRANSIT SYSTEMATICS, NEW LD COEFFICIENTS FROM 3D \
@@ -97,25 +160,11 @@ def add_spots(pardict, res):
     print('TO ADD: GRANULATION') # To be considered as starspots, especially
                                  # for giant stars? Not this time
 
+    xobs, yobs, yobs_err = read_pandexo_results(pardict, instrument)
+
     sys.path.append('../KSint_wrapper/SRC/')
     import ksint_wrapper_fitcontrast
 
-    spec_obs = pickle.load(open(pardict['pandexo_out'], 'rb'))
-    xobs, yobs, yobs_err = jpi.jwst_1d_spec(spec_obs, R=res, \
-                num_tran=3, model=False, plot=False)
-                #, x_range=[.8,1.28])
-    #xobs, yobs, xobs_err, yobs_err = spec_obs
-    xobs = np.array(xobs)[0]
-    #xobs_err = np.array(xobs_err)
-    yobs = np.array(yobs)[0]
-    yobs_err = np.array(yobs_err)[0]
-
-    plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o')
-    plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
-    plt.ylabel('Transit depth', fontsize=16)
-    plt.title('Transmission spectrum output from PandExo', fontsize=16)
-    plt.show()
-    set_trace()
     # Add "white" light curve term
     # If spectrum computed with PandExo
     #floor = spec_obs['error_w_floor']
@@ -128,9 +177,6 @@ def add_spots(pardict, res):
     yerr_white = np.mean(yobs_err)/len(yobs)**0.5
     wm, ua, eua, ub, eub = np.loadtxt(pardict['ldfile'], \
                     unpack=True, skiprows=3)
-    plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o')
-    #plt.show()
-    plt.savefig(pardict['data_folder'] + 'spec_model.pdf')
 
     # Here, the last element of arange is the white light curve
     for i in np.arange(1, len(xobs) - 1):
@@ -218,9 +264,10 @@ def add_spots(pardict, res):
         plt.ylabel('Relative flux', fontsize=16)
         plt.title('Channel: ' + str(round(xobs[i], 3)) + '$\mu$m', fontsize=16)
         #plt.legend(loc='best', fontsize=16, frameon=False)
-        plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) + '.pdf')
+        plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
+                        + '_' + instrument + '.pdf')
         savefile = open(pardict['data_folder'] + 'transit_spots' \
-                        + str(i) + '.pic', 'wb')
+                        + '_' + str(i) + '_' + instrument + '.pic', 'wb')
         pickle.dump([tt, transit, yerr, xobs[i]], savefile)
         savefile.close()
 
