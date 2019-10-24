@@ -58,7 +58,7 @@ def generate_spectrum_jwst(pardict):
 
     print('Starting PandExo run for JWST')
     jdi.run_pandexo(exo_dict, ['NIRSpec Prism'], save_file=True, \
-            output_file=pardict['pandexo_out_jwst'])
+            output_file=pardict['pandexo_out'])
     '''
     # Load in output from run
     out = pickle.load(open(pardict['pandexo_out'],'rb'))
@@ -129,25 +129,25 @@ def read_pandexo_results(pardict, instrument, res=20):
     '''
 
     if instrument == 'jwst':
-        spec_obs = pickle.load(open(pardict['pandexo_out_jwst'], 'rb'))
+        spec_obs = pickle.load(open(pardict['pandexo_out'], 'rb'))
         xobs, yobs, yobs_err = jpi.jwst_1d_spec(spec_obs, R=res, \
                     num_tran=3, model=False, plot=False)
+        xobs = np.array(xobs)[0]
+        yobs = np.array(yobs)[0]
+        yobs_err = np.array(yobs_err)[0]
     elif instrument == 'hst':
+        spec_obs = pickle.load(open(pardict['pandexo_out'], 'rb'))
         xobs, yobs, yobs_err, modelwave, modelspec \
-                        = jpi.hst_spec(pardict['pandexo_out_hst'], plot=False)
+                        = jpi.hst_spec(spec_obs, plot=False)
 
-    xobs = np.array(xobs)[0]
-    yobs = np.array(yobs)[0]
-    yobs_err = np.array(yobs_err)[0]
     plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o')
     plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
     plt.ylabel('Transit depth', fontsize=16)
     plt.title('Transmission spectrum output from PandExo', fontsize=16)
-    plt.show()
+    #plt.show()
     plt.savefig(pardict['data_folder'] + 'spec_model_' + instrument + '.pdf')
-    #set_trace()
     plt.close('all')
-    
+
     return xobs, yobs, yobs_err
 
 def add_spots(pardict, instrument):
@@ -267,7 +267,7 @@ def add_spots(pardict, instrument):
         plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
                         + '_' + instrument + '.pdf')
         savefile = open(pardict['data_folder'] + 'transit_spots' \
-                        + '_' + str(i) + '_' + instrument + '.pic', 'wb')
+                        + '_' + str(i) + '.pic', 'wb')
         pickle.dump([tt, transit, yerr, xobs[i]], savefile)
         savefile.close()
 

@@ -66,7 +66,7 @@ def transit_emcee(diz, logger, ind):
     plt.close('all')
     os.system('mkdir ' + diz['chains_folder'])
     lcfile = open(diz['data_folder'] + 'transit_spots_' + str(ind) \
-                    + '_jwst.pic', 'rb')
+                    + '.pic', 'rb')
     lc = pickle.load(lcfile)
     lcfile.close()
     t, y, yerr, wl = lc
@@ -75,7 +75,7 @@ def transit_emcee(diz, logger, ind):
     # Add systematics and save for common mode correction
     # (noise calculated from PANDEXO)
     # - For computing errors
-    spec_obs = pickle.load(open(diz['pandexo_out_jwst'], 'rb'))
+    spec_obs = pickle.load(open(diz['pandexo_out'], 'rb'))
     #scale = np.mean(spec_obs[2])/(len(spec_obs[2])**0.5)
     y, yerr = add_rnoise(y, t, np.mean(yerr), psyst)
     yerr /= y.max()

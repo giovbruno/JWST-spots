@@ -81,8 +81,7 @@ def read_res(pardict, ind, instrument, plotname, resfile):
             plt.plot(ww, soln.x*spec, label=str(temp))
             chi2red[i] = np.sum((A[:, 2] - soln.x*specA)**2/yerrfit**2) \
                             /(len(yerrfit) - 1)
-            dict_results[stmod][temp] = chi2red
-
+            dict_results[stmod][temp] = chi2red[i]
         plt.legend(frameon=False, loc='best', fontsize=16)
         plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
         plt.ylabel('Transit depth rise [ppm]', fontsize=16)
@@ -170,20 +169,19 @@ def plot_precision(pardict, xaxis, deltapar):
     Deltapar is used for the final plot label.
     '''
 
-    resfolder = pardict['project_folder'] \
-                + pardict['instrument'] + 'p' + str(pardict['rplanet']) \
-                + '_star' + str(pardict['rstar']) + '_' \
-                + str(pardict['tstar']) + '_' + str(pardict['loggstar']) \
-                + '_spot' + str(pardict['tumbra']) + '_' \
-                + str(pardict['tpenumbra']) + '_mag'
-
-    plt.figure(figsize=(8, 7))
+    #plt.figure(figsize=(8, 7))
     # Take the min chi2 value for each stellar model, then get stddev
     diff_spotpar = []
     std_spotpar = []
     for j, xpar in enumerate(xaxis):
-        chi2results = pickle.load(open(resfolder + str(xpar) + \
-                    '/MCMC/contrast_res.pic', 'rb'))
+        resfolder = pardict['project_folder'] \
+                    + pardict['instrument'] + 'p' + str(np.round(xpar, 4)) \
+                    + '_star' + str(pardict['rstar']) + '_' \
+                    + str(pardict['tstar']) + '_' + str(pardict['loggstar']) \
+                    + '_spot' + str(pardict['tumbra']) + '_' \
+                + str(pardict['tpenumbra']) + '_mag' + str(pardict['magstar'])
+        chi2results = pickle.load(open(resfolder + '/MCMC/contrast_res.pic', \
+                        'rb'))
         tmin, chi2min = [], []
         for stmod in ['k93models', 'phoenix']:#, 'ck04models']:
             t, chi2 = [], []
@@ -198,16 +196,22 @@ def plot_precision(pardict, xaxis, deltapar):
         diff_spotpar.append(abs(pardict['tumbra'] - np.mean(tmin)))
         # Largest sunspot temp - min with different starspot models
         std_spotpar.append(max(tmin) - min(tmin))
-        plt.errorbar([xpar], diff_spotpar[j], yerr=std_spotpar[j], \
+        plt.errorbar([abs(xpar)], diff_spotpar[j], yerr=std_spotpar[j], \
                             fmt='ko', ms=10, mfc='white', capsize=2)
     # Polynomial fit
-    fit = np.polyfit(np.array(xaxis), np.array(diff_spotpar), 2, \
+    xaxis = np.array(xaxis)
+    fit = np.polyfit(abs(xaxis), np.array(diff_spotpar), 2, \
                         w=1./np.array(std_spotpar))
-    fun = np.polyval(fit, xaxis)
-    plt.plot(xaxis, fun, 'r--', ms=2)
-    plt.xlabel(deltapar, fontsize=16)
+    fun = np.polyval(fit, abs(xaxis))
+    plt.plot(abs(xaxis), fun, 'r--', ms=2)
+    #plt.xlabel(deltapar, fontsize=16)
+    #plt.xlabel('$T_\star - T_\mathrm{spot}$', fontsize=16)
+    plt.xlabel('$R_\mathrm{p} [R_\mathrm{J}]$', fontsize=16)
     plt.ylabel('$|T_\mathrm{spot, mod} - T_\mathrm{spot, meas}$|', fontsize=16)
+    plt.text(0.8, 1250, '$T_\star =$' + str(pardict['tstar']) \
+                    + ' K', fontsize=16)
     plt.show()
-    plt.savefig(resfolder + str(xpar) + '/MCMC/diff_' + deltapar + '.pdf')
+    plt.savefig(pardict['project_folder'] \
+                + pardict['instrument'] + 'diff_' + deltapar + '.pdf')
 
     return

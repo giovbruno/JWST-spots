@@ -16,10 +16,10 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
     if not os.path.exists(pardict['project_folder'] + pardict['instrument']):
         os.mkdir(pardict['project_folder'] + pardict['instrument'])
     pardict['case_folder'] = pardict['project_folder'] \
-                + pardict['instrument'] + 'p' + str(rplanet) + '_star' \
-                + str(rstar) + '_' + str(tstar) + '_' + str(loggstar) \
-                + '_spot' + str(tumbra) + '_' + str(tpenumbra) + '_mag' \
-                + str(magstar) + '/'
+            + pardict['instrument'] + 'p' + str(np.round(rplanet, 4)) \
+            + '_star' + str(rstar) + '_' + str(tstar) + '_' \
+            + str(loggstar) + '_spot' + str(tumbra) + '_' + str(tpenumbra) \
+            + '_mag' + str(magstar) + '/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -29,8 +29,8 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
     pardict['chains_folder']  = pardict['case_folder'] + 'MCMC/'
     if not os.path.exists(pardict['chains_folder']):
         os.mkdir(pardict['chains_folder'])
-    pardict['pandexo_out_jwst'] = pardict['data_folder'] + 'singlerun_jwst.p'
-    pardict['pandexo_out_hst'] = pardict['data_folder'] + 'singlerun_hst.p'
+    pardict['pandexo_out'] = pardict['data_folder'] + 'singlerun_3transits.p'
+    #pardict['pandexo_out_hst'] = pardict['data_folder'] + 'singlerun_hst.p'
     pardict['logfile_data'] = pardict['data_folder'] + 'logfile.log'
     pardict['logfile_chains'] = pardict['chains_folder'] + 'logfile.log'
     pardict['ldfile'] = pardict['project_folder'] \
@@ -70,10 +70,10 @@ def go(magstar, rstar, tstar, tumbra, tpenumbra, loggstar, rplanet, instr):
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
     #simulate_transit.add_spots(pardict, 'hst')
-    #expchan = np.arange(15)
+    #expchan = np.arange(1, 14)
     #transit_fit.transit_spectro(pardict, expchan, 'hst')
     #spectra_fit.read_res(pardict, expchan, 'hst', pardict['chains_folder'] \
-    #                   + 'contrast_plot_')
+            + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res.pic')
 
     return pardict
 
@@ -107,12 +107,15 @@ def cycle():
     #mags = np.concatenate((np.arange(9., 13., 0.5), np.arange(15., 16., 0.5)))
     #for mag in mags:
     #    pardict = go(mag, 1., 5700, 5000, 5500, 4.5, 1., 'NIRSpec_Prism')
-    tumbras = [-1300, -1000, -600, -300]
-    for td in tumbras:
-        pardict = go(10, 1., 5000, 5000 + td , 5500, 4.5, 1., 'NIRSpec_Prism')
+    #tumbras = [-1300, -1000, -600, -300]
+    #for td in tumbras:
+    #    pardict = go(10, 1., 5000, 5000 + td , 5500, 4.5, 1., 'NIRSpec_Prism')
     #for mag in mags:
     #    pardict = go(mag, 1., 4000, 3500, 5500, 4.5, 1., 'NIRSpec_Prism')
+    radii = np.linspace(0.01, 0.11, 5)
+    for i, rprst in enumerate(radii):
+        pardict = go(10., 1., 5000, 4500, 5500, 4.5, rprst*9.95, 'NIRSpec_Prism')
 
-    spectra_fit.plot_precision(pardict, tumbras, '$T_\star - T_\mathrm{spot}')
+    spectra_fit.plot_precision(pardict, radii*9.95, 'rp_rstar')
 
     return
