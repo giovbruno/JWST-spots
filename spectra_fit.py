@@ -53,7 +53,9 @@ def read_res(pardict, ind, instrument, plotname, resfile):
     dict_results = {}
     # Try with different stellar models and find best Tspot fit
     for stmod in ['k93models', 'phoenix']:#, 'ck04models']:
-        dict_results[stmod] = {}
+        pm = pardict['magstar']
+        dict_results[pm] = {}
+        dict_results[pm][stmod] = {}
         tspot_ = np.arange(3500, 6000, 100)
         chi2red = np.zeros(len(tspot_)) + np.inf
         plt.figure()
@@ -81,7 +83,7 @@ def read_res(pardict, ind, instrument, plotname, resfile):
             plt.plot(ww, soln.x*spec, label=str(temp))
             chi2red[i] = np.sum((A[:, 2] - soln.x*specA)**2/yerrfit**2) \
                             /(len(yerrfit) - 1)
-            dict_results[stmod][temp] = chi2red[i]
+            dict_results[pm][stmod][temp - pardict['tstar']] = chi2red[i]
         plt.legend(frameon=False, loc='best', fontsize=16)
         plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
         plt.ylabel('Transit depth rise [ppm]', fontsize=16)
@@ -97,9 +99,9 @@ def read_res(pardict, ind, instrument, plotname, resfile):
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
         plt.close('all')
 
-    fresults = open(resfile, 'wb')
-    pickle.dump(dict_results, fresults)
-    fresults.close()
+        fresults = open(resfile + stmod + '.pic', 'wb')
+        pickle.dump(dict_results, fresults)
+        fresults.close()
 
     return np.array(wl), np.array(A), np.array(x0), np.array(sigma)
 
@@ -133,7 +135,7 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
     #plt.errorbar(wnew/10., rebstar, yerr=errstar, label=str(tstar))
 
     for i in tspot:
-        spot = pysynphot.Icat(stmodel, i, 0.0, pardict['loggstar']).flux
+        spot = pysynphot.Icat(stmodel, i, 0.0, pardict['loggstar'] - 0.5).flux
         specnew = spot#(1 - ffact)*star + ffact*spot
         rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
         errnew += rebnew*abs(np.random.normal(loc=0., scale=5.5e-3,\
@@ -146,17 +148,19 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
         starref = rebstar[wref]
         fref = 1. - np.mean(spotref/starref)
         rise = (1. - rebnew/rebstar)/fref
-        '''
+
         plt.errorbar(wnew/1e4, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
                         + str(i) + 'K')
 
-    plt.legend(frameon=False)
-    plt.title('Stellar spectrum: ' + str(tstar) + ' K', fontsize=16)
+    plt.legend(frameon=False, fontsize=14)
+    plt.title('Stellar spectrum: ' + str(pardict['tstar']) + ' K', fontsize=16)
     #plt.plot([0.719, 0.719], [0.5, 9.5], 'k--')
     plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
-    plt.ylabel('Dimming factor', fontsize=16)
+    plt.ylabel('Flux rise [Relative values]', fontsize=16)
+    plt.xlim(1, 5)
+    plt.ylim(0, 4)
     plt.show()
-    '''
+
     flag = np.logical_or(np.isnan(wnew), np.isnan(rise))
 
     return wnew[~flag], rise[~flag]
@@ -168,6 +172,10 @@ def plot_precision(pardict, xaxis, deltapar):
 
     Deltapar is used for the final plot label.
     '''
+
+    res = {}
+    res['x'] = []
+    res['y'] = []
 
     #plt.figure(figsize=(8, 7))
     # Take the min chi2 value for each stellar model, then get stddev
@@ -198,6 +206,9 @@ def plot_precision(pardict, xaxis, deltapar):
         std_spotpar.append(max(tmin) - min(tmin))
         plt.errorbar([abs(xpar)], diff_spotpar[j], yerr=std_spotpar[j], \
                             fmt='ko', ms=10, mfc='white', capsize=2)
+        res['x'].append(xpar)
+        res['y'].append(diff_spotpar[j])
+
     # Polynomial fit
     xaxis = np.array(xaxis)
     fit = np.polyfit(abs(xaxis), np.array(diff_spotpar), 2, \
@@ -214,4 +225,4 @@ def plot_precision(pardict, xaxis, deltapar):
     plt.savefig(pardict['project_folder'] \
                 + pardict['instrument'] + 'diff_' + deltapar + '.pdf')
 
-    return
+    return res

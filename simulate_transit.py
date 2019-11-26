@@ -12,7 +12,10 @@ from scipy.interpolate import interp1d
 import numpy as np
 import pysynphot
 import pickle, os
+from astropy.io import fits
 from pdb import set_trace
+
+modelsfolder = '/home/giovanni/archive/Stellar_models/phxinten/HiRes/'
 
 def generate_spectrum_jwst(pardict):
 
@@ -22,7 +25,7 @@ def generate_spectrum_jwst(pardict):
     exo_dict['observation']['sat_level'] = 80  #saturation level in percent
                                                #of full well
     exo_dict['observation']['sat_unit'] = '%'
-    exo_dict['observation']['noccultations'] = 2   #number of transits
+    exo_dict['observation']['noccultations'] = 3   #number of transits
     exo_dict['observation']['R'] = None    #fixed binning. I usually suggest ZERO
                                          #binning.. you can always bin later
                                          #without having to redo the calcualtion
@@ -121,7 +124,7 @@ def generate_spectrum_hst(pardict):
 
     return
 
-def read_pandexo_results(pardict, instrument, res=20):
+def read_pandexo_results(pardict, instrument, res=4):
     '''
     Used for both HST and JWST simulations.
 
@@ -144,7 +147,7 @@ def read_pandexo_results(pardict, instrument, res=20):
     plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
     plt.ylabel('Transit depth', fontsize=16)
     plt.title('Transmission spectrum output from PandExo', fontsize=16)
-    #plt.show()
+    plt.show()
     plt.savefig(pardict['data_folder'] + 'spec_model_' + instrument + '.pdf')
     plt.close('all')
 
@@ -153,12 +156,12 @@ def read_pandexo_results(pardict, instrument, res=20):
 def add_spots(pardict, instrument):
 
     # To implement
-    print('TO ADD: TRANSIT SYSTEMATICS, NEW LD COEFFICIENTS FROM 3D \
-                STELLAR MODELS?') # Nope
-    print('TO ADD: UNCERTAINTIES ON LD COEFFICIENTS, FROM REASONABLE UNC. \
-                ON STELLAR PARAMETERS') # Meh
-    print('TO ADD: GRANULATION') # To be considered as starspots, especially
-                                 # for giant stars? Not this time
+    print('***ASSUMED NO TRANSIT SYSTEMATICS, NO LD COEFFICIENTS FROM 3D \
+              STELLAR MODELS?')
+    print('***NOT INCLUDED: UNCERTAINTIES ON LD COEFFICIENTS, FROM REASONABLE \
+              UNC. ON STELLAR PARAMETERS') # Meh
+    print('***NOT INCLUDED: GRANULATION')
+    print('***DID YOU CHECK STELLAR DENSITY')
 
     xobs, yobs, yobs_err = read_pandexo_results(pardict, instrument)
 
@@ -175,30 +178,27 @@ def add_spots(pardict, instrument):
                     weights=1./(yobs_err**2))#/(len(yobs)**0.5)
     relsigma = np.concatenate((yobs_err, [relsigma_white]))
     yerr_white = np.mean(yobs_err)/len(yobs)**0.5
-    wm, ua, eua, ub, eub = np.loadtxt(pardict['ldfile'], \
-                    unpack=True, skiprows=3)
+    ua, ub = np.genfromtxt(pardict['ldfile'], unpack=True, \
+                            skip_header=2, usecols=(8, 10))
+
+    if len(ua) != len(yobs):
+        print('# LD coefficients != # transmission spectrum points. Wrong LD file?')
+        set_trace()
 
     # Here, the last element of arange is the white light curve
-    for i in np.arange(1, len(xobs) - 1):
+    for i in np.arange(len(xobs)):
+
         # Compute transit with two spots
         fix_dict = {}
-        '''
-        if i < 10:   # Need to implement LD coefficients here
-            fix_dict['c1'] = 0.25 #+ np.random.normal(loc = 0., scale = 0.01)#ua[i]#ub[i]
-            fix_dict['c2'] = 0.2 #+ np.random.normal(loc = 0.0, scale = 0.01)#ua[i]#ub[i]
-        else:
-            fix_dict['c1'] = 0. #+ np.random.normal(loc = 0., scale = 0.01)#ua[i]#ub[i]
-            fix_dict['c2'] = 0. #+ np.random.normal(loc = 0.0, scale = 0.01)#ua[i]#ub[i]
-        '''
-        #print(fix_dict['c1'], fix_dict['c2'])
         fix_dict['prot'] = 11.8   # Hebrard+2012
         fix_dict['incl'] = 90.
         fix_dict['posang'] = 0.
         fix_dict['lat'] = 12. # umbra
         fix_dict['latp'] = 12. # penumbra
-        fix_dict['rho'] = 1.7*1.408
-        #fix_dict['contrast1'] = 0.8
-        #fix_dict['contrast2'] = 0.5
+        #fix_dict['rho'] = 1.7*1.408 #5000 K star ~ WASP-52
+        #fix_dict['rho'] = 13.7*1.408 # 3500 K star ~ Kepler-1646
+        # Density derived from logg
+        fix_dict['rho'] = 5.14e-5/pardict['rstar']*10**pardict['loggstar']
         fix_dict['P'] = 2.0
         fix_dict['i'] = 88.
         fix_dict['e'] = 0.
@@ -208,27 +208,33 @@ def add_spots(pardict, instrument):
         # Random distribution for spots parameters
         params = np.zeros(8 + 3) # second spot is penumbra
         params[0] = yobs[i]**0.5 # kr
-        params[1] = 252.#270  # M
+        params[1] = 252. # M
         # LD coeffs
-        if xobs[i] < 3.:
-            params[2], params[3] = 0.25 - 0.003*i, 0.2 - 0.003*i
-        if 0.2 - 0.003*i < 0.01:
-            params[2], params[3] = 0.01, 0.01
+        params[2], params[3] = ua[i], ub[i]
         # Long, size
-        params[4], params[5] = 300., 5.0 #240., 5.0
+        params[4], params[5] = 300., 5.0
         # Contrast
-        wl = pysynphot.Icat('phoenix', pardict['tstar'], 0.0, \
-                pardict['loggstar']).wave
-        starm = pysynphot.Icat('phoenix', pardict['tstar'], 0.0, \
-                pardict['loggstar']).flux
-        umbram = pysynphot.Icat('phoenix', pardict['tumbra'], 0.0, \
-                pardict['loggstar']).flux
-        penumbram = pysynphot.Icat('phoenix', pardict['tpenumbra'], 0.0, \
-                pardict['loggstar']).flux
+        wl = fits.open(modelsfolder \
+                    +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
+        starm = fits.open(modelsfolder + 'lte0' + str(int(pardict['tstar'])) \
+                    + '-' + '{:3.2f}'.format(pardict['loggstar']) \
+                    + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+        umbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tumbra'])) \
+                    + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
+                    + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+        penumbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tpenumbra'])) \
+                    + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
+                    + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
         contrast = umbram/starm
         contrastp = penumbram/starm
-        chanleft = (xobs[i] - 0.5*(xobs[i] - xobs[i - 1])) #* u.micrometer
-        chanright = (xobs[i] + 0.5*(xobs[i + 1] - xobs[i])) #* u.micrometer
+        if i == 0:
+            chanleft = wl.min()*1e-4
+        else:
+            chanleft = (xobs[i] - 0.5*(xobs[i] - xobs[i - 1])) #* u.micrometer
+        if i == len(xobs) -1:
+            chanright = wl.max()*1e-4
+        else:
+            chanright = (xobs[i] + 0.5*(xobs[i + 1] - xobs[i])) #* u.micrometer
         wlcenter = np.mean([chanleft, chanright]) #* u.micrometer
         wlbin = np.logical_and(wl*1e-4 >= chanleft, wl*1e-4 <= chanright)
         params[6] = 1. - np.mean(contrast[wlbin]) # Contrast spot 1
@@ -239,9 +245,6 @@ def add_spots(pardict, instrument):
         print('Channel', str(i), ', Kr =', np.round(params[0], 3), \
                         'Contrast umbra =', np.round(params[6], 3))#, \
                         #'Contrast penumbra =', np.round(params[9], 3))
-        # Spot 2
-        #params[5], params[6], params[7] = 0.1, 240., 4.0
-
         tt = np.arange(0., 0.2, 60.*1./86400.)
         transit = ksint_wrapper_fitcontrast.main(params, tt, fix_dict)
         # White noise
@@ -262,7 +265,7 @@ def add_spots(pardict, instrument):
         '''
         plt.xlabel('Time [d]', fontsize=16)
         plt.ylabel('Relative flux', fontsize=16)
-        plt.title('Channel: ' + str(round(xobs[i], 3)) + '$\mu$m', fontsize=16)
+        plt.title('Channel: ' + str(round(xobs[i], 3)) + ' $\mu$m', fontsize=16)
         #plt.legend(loc='best', fontsize=16, frameon=False)
         plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
                         + '_' + instrument + '.pdf')
@@ -274,7 +277,7 @@ def add_spots(pardict, instrument):
     # Remove pandexo plot files
     os.system('rm *html')
 
-    return #i#tt, transit
+    return len(xobs) #i#tt, transit
 
 def channelmerge(pardict, ch1, ch2):
     '''
@@ -293,3 +296,12 @@ def channelmerge(pardict, ch1, ch2):
     pickle.dump([[t1, t2], [y1, y2], [err1, err2]], fileout)
 
     return
+
+def air_to_vacuum(wl):
+    '''
+    From https://ui.adsabs.harvard.edu/abs/1991ApJS...77..119M/abstract.
+    '''
+    ratio = 6.4328e-5 + 2.94981e-2/(146. - 1e4/wl) + 2.5540e-4/(41 - 1e4/wl)
+    wl_vac = ratio*wl + wl
+
+    return wl_vac
