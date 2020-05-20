@@ -2,7 +2,7 @@
 # spot occultations.
 
 import sys
-sys.path.append('/home/giovanni/archive/python/pandexo/')
+sys.path.append('/home/giovanni/Dropbox/Shelf/python/pandexo/')
 import warnings
 warnings.filterwarnings('ignore')
 import pandexo.engine.justdoit as jdi # THIS IS THE HOLY GRAIL OF PANDEXO
@@ -15,7 +15,7 @@ import pickle, os
 from astropy.io import fits
 from pdb import set_trace
 
-modelsfolder = '/home/giovanni/archive/Stellar_models/phxinten/HiRes/'
+modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
 
 def generate_spectrum_jwst(pardict):
 
@@ -25,7 +25,7 @@ def generate_spectrum_jwst(pardict):
     exo_dict['observation']['sat_level'] = 80  #saturation level in percent
                                                #of full well
     exo_dict['observation']['sat_unit'] = '%'
-    exo_dict['observation']['noccultations'] = 3   #number of transits
+    exo_dict['observation']['noccultations'] = 1   #number of transits
     exo_dict['observation']['R'] = None    #fixed binning. I usually suggest ZERO
                                          #binning.. you can always bin later
                                          #without having to redo the calcualtion
@@ -153,17 +153,41 @@ def read_pandexo_results(pardict, instrument, res=4):
 
     return xobs, yobs, yobs_err
 
-def add_spots(pardict, instrument):
+def add_spots(pardict, instrument, simultr=None):
+    '''
+    Parameters
+    ----------
+    simultr: whether the transit depth uncertainties are calculated with
+    PandExo (None), provided with a file (file name), or both (file name
+    with '+' appended), or also explicitely given (list of w, f, err arrays).
+    '''
 
     # To implement
     print('***ASSUMED NO TRANSIT SYSTEMATICS, NO LD COEFFICIENTS FROM 3D \
-              STELLAR MODELS?')
+              STELLAR MODELS')
     print('***NOT INCLUDED: UNCERTAINTIES ON LD COEFFICIENTS, FROM REASONABLE \
               UNC. ON STELLAR PARAMETERS') # Meh
     print('***NOT INCLUDED: GRANULATION')
-    print('***DID YOU CHECK STELLAR DENSITY')
+    print('\n\n**** COMPUTE LD ***')
+    print('***Pplanet = 2 days')
 
-    xobs, yobs, yobs_err = read_pandexo_results(pardict, instrument)
+    if simultr == None:
+        xobs, yobs, yobs_err = read_pandexo_results(pardict, instrument, res=4)
+    elif type(simultr) == 'str' and rsimultr.endswith('+'):
+        xobs1, yobs1, yobs_err1 = np.loadtxt(uncert_file[:-1], unpack=True)
+        xobs2, yobs2, yobs_err2 = read_pandexo_results(pardict, instrument, \
+                                    res=15)
+        xobs = np.concatenate((xobs1, xobs2))
+        yobs = np.concatenate((yobs1, yobs2))
+        yobs_err = np.concatenate((yobs_err1, yobs_err2))
+    elif type(simultr) == 'str' and not simultr.endswith('+'):
+        xobs, yobs, yobs_err = np.loadtxt(uncert_file, unpack=True)
+    elif len(simultr) == 3:
+        # First and last one must have some rebinning problem
+        xobs, yobs, yobs_err = simultr[0], simultr[1], simultr[2]
+
+    #flag = xobs < 3.
+    #xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
 
     sys.path.append('../KSint_wrapper/SRC/')
     import ksint_wrapper_fitcontrast
@@ -172,47 +196,67 @@ def add_spots(pardict, instrument):
     # If spectrum computed with PandExo
     #floor = spec_obs['error_w_floor']
 
-    yobs_white = np.average(yobs, weights=1./(np.array(yobs_err)**2))
+    #yobs_white = np.average(yobs, weights=1./(np.array(yobs_err)**2))
     #relsigma = np.concatenate((yobs, [yobs_white]))
-    relsigma_white = np.average(yobs, \
-                    weights=1./(yobs_err**2))#/(len(yobs)**0.5)
-    relsigma = np.concatenate((yobs_err, [relsigma_white]))
-    yerr_white = np.mean(yobs_err)/len(yobs)**0.5
-    ua, ub = np.genfromtxt(pardict['ldfile'], unpack=True, \
-                            skip_header=2, usecols=(8, 10))
-
-    if len(ua) != len(yobs):
+    #relsigma_white = np.average(yobs, \
+    #                weights=1./(yobs_err**2))#/(len(yobs)**0.5)
+    #relsigma = np.concatenate((yobs_err, [relsigma_white]))
+    relsigma = yobs_err
+    #yerr_white = np.mean(yobs_err)/len(yobs)**0.5
+    #wlow, wup, ua, ub = np.genfromtxt(pardict['ldfile_quadratic'], \
+    #            unpack=True, skip_header=2, usecols=(0, 1, 2, 4))
+    wlowblue, wupblue, uablue, ubblue = \
+        np.loadtxt(pardict['ldfile_quadratic_blue'], unpack=True, skiprows=4)
+    wlowred, wupred, uared, ubred = \
+        np.loadtxt(pardict['ldfile_quadratic_red'], unpack=True, skiprows=4)
+    if len(uablue) != len(yobs):
         print('# LD coefficients != # transmission spectrum points. Wrong LD file?')
-        set_trace()
+        #set_trace()
 
     # Here, the last element of arange is the white light curve
     for i in np.arange(len(xobs)):
 
         # Compute transit with two spots
         fix_dict = {}
-        fix_dict['prot'] = 11.8   # Hebrard+2012
+        fix_dict['prot'] = 11.0   # Hebrard+2012
         fix_dict['incl'] = 90.
         fix_dict['posang'] = 0.
-        fix_dict['lat'] = 12. # umbra
+        fix_dict['lat'] = 28 # 12umbra
         fix_dict['latp'] = 12. # penumbra
         #fix_dict['rho'] = 1.7*1.408 #5000 K star ~ WASP-52
         #fix_dict['rho'] = 13.7*1.408 # 3500 K star ~ Kepler-1646
         # Density derived from logg
-        fix_dict['rho'] = 5.14e-5/pardict['rstar']*10**pardict['loggstar']
-        fix_dict['P'] = 2.0
+        fix_dict['rho'] = 5.14e-5/pardict['rstar']*10**pardict['loggstar']  #g/cm3
+        fix_dict['P'] = pardict['pplanet']
         fix_dict['i'] = 88.
         fix_dict['e'] = 0.
         fix_dict['w'] = 180.
         fix_dict['omega'] = 0.
         fix_dict['nspots'] = 1
+
         # Random distribution for spots parameters
         params = np.zeros(8 + 3) # second spot is penumbra
         params[0] = yobs[i]**0.5 # kr
-        params[1] = 252. # M
+        params[1] = 252 # M, K
+        #params[1] = 232. # F
         # LD coeffs
-        params[2], params[3] = ua[i], ub[i]
+        if type(uared) == np.float64:
+            uared = [uared]
+            ubred = [ubred]
+        if i < len(uablue):
+            params[2], params[3] = uablue[i], ubblue[i]
+        elif i - len(uablue) < len(uared):
+            params[2], params[3] = uared[i - len(uablue)], \
+                                                        ubred[i - len(uablue)]
+        else:
+            params[2], params[3] = 0., 0.
+        #params[2], params[3] = ua[i], ub[i]
+        #params[2], params[3] = 0.2, 0.2
         # Long, size
-        params[4], params[5] = 300., 5.0
+        #params[4], params[5] = 300., 5.0
+        #params[4], params[5] = 270, 3. # K ??
+        params[4], params[5] = 260, 3.   # M
+        #params[4], params[5] = 250, 3. # K ??
         # Contrast
         wl = fits.open(modelsfolder \
                     +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
@@ -245,16 +289,18 @@ def add_spots(pardict, instrument):
         print('Channel', str(i), ', Kr =', np.round(params[0], 3), \
                         'Contrast umbra =', np.round(params[6], 3))#, \
                         #'Contrast penumbra =', np.round(params[9], 3))
-        tt = np.arange(0., 0.2, 60.*1./86400.)
+        tt = np.arange(0., 0.2, 60.*1./86400.)  # M, K
+        #tt = np.arange(0., 0.4, 60.*1./86400.) # F star
         transit = ksint_wrapper_fitcontrast.main(params, tt, fix_dict)
         # White noise
-        transit *= np.random.normal(loc=1., scale=relsigma[i], size=len(tt))
-        yerr = np.zeros(len(transit)) + np.mean(relsigma[i])
+        transit *= np.random.normal(loc=1., scale=relsigma[i]*len(tt)**0.5, \
+                                    size=len(tt))
+        yerr = np.zeros(len(transit)) + np.mean(relsigma[i])*len(tt)**0.5
         #tt, transit, yerr = tt[flag], transit[flag], yerr[flag]
         # Delta x^2 = 2 x Delta x
-        relsigma_i = np.zeros(len(tt)) + relsigma[i]/(2.*(yobs[i]**0.5))
+        #relsigma_i = np.zeros(len(tt)) + relsigma[i]/(2.*(yobs[i]**0.5))
         plt.close('all')
-        plt.errorbar(tt, transit, yerr=relsigma[i], fmt='k.')#, capsize=2)
+        plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
         '''
         flagv = np.logical_and(tt > 0.07491, tt < 0.084)
         flago = np.logical_and(tt > 0.07264, tt < 0.08986)

@@ -44,15 +44,15 @@ def transit_spectro(pardict, expchan, instrument):
     #    = np.genfromtxt(pardict['ldfile_nonlinear'], \
     #                    unpack=True, skip_header=2, usecols=(0, 1, 2, 4, 6, 8))
     # Priors fron ExoCTK?
-    wlow, wup, u1, u2 = np.genfromtxt(pardict['ldfile_quadratic_blue'], unpack=True, \
-                                skip_header=2, usecols=(0, 1, 2, 4))
-    wm = np.mean([wlow, wup], axis=0)
-    # Band-integrated transit files in the data folder
-    ll = len(glob.glob(pardict['data_folder'] + 'transits_spots*.pic'))
-    #ll = len(wm) - 1
-    whiteleft = wm.min() - np.diff(wm)[0]/2.
-    whiteright = wm.max() + np.diff(wm)[0]/2.
-    print('Band: ' + str(whiteleft) + '-' + str(whiteright))
+    #wlow, wup, u1, u2 = np.genfromtxt(pardict['ldfile_quadratic_blue'], unpack=True, \
+    #                            skip_header=2, usecols=(0, 1, 2, 4))
+    #wm = np.mean([wlow, wup], axis=0)
+    ## Band-integrated transit files in the data folder
+    #ll = len(glob.glob(pardict['data_folder'] + 'transits_spots*.pic'))
+    ##ll = len(wm) - 1
+    #whiteleft = wm.min() - np.diff(wm)[0]/2.
+    #whiteright = wm.max() + np.diff(wm)[0]/2.
+    #print('Band: ' + str(whiteleft) + '-' + str(whiteright))
 
     #ldw = [ua[-1], ub[-1]]
 
@@ -91,9 +91,9 @@ def transit_emcee(diz, ind):
     # Add systematics and save for common mode correction
     # (noise calculated from PANDEXO)
     # - For computing errors
-    spec_obs = pickle.load(open(diz['pandexo_out'], 'rb'))
+    #spec_obs = pickle.load(open(diz['pandexo_out'], 'rb'))
     #scale = np.mean(spec_obs[2])/(len(spec_obs[2])**0.5)
-    y = add_rnoise(y, t, np.mean(yerr), psyst)
+    #y = add_rnoise(y, t, np.mean(yerr), psyst)
     yerr /= y.max()
 
     y /= y.max()
@@ -117,18 +117,17 @@ def transit_emcee(diz, ind):
     aR = (6.67408e-11*rhostar*1e3*(per_planet*86400)**2/(3.*np.pi))**(1./3.)
     global inc
     inc = 88.
-    '''
+
     global x0
-    if diz['tstar'] == 5000:
+    if diz['tstar'] == 5000 or diz['tstar'] == 3500:
         x0 = 0.1051
     global t0
-    if diz['tstar'] == 5000:
+    if diz['tstar'] == 5000 or diz['tstar'] == 3500:
         t0 = 0.10
-    '''
+
     # LM fit boundaries - fit for t0 and x0 only on the first channel
     bounds_model = []
     bounds_model.append((0.01, 0.2))  # rp/r*
-    bounds_model.append((0.05, 0.15)) # t0 # M, K star = 0.10
     #bounds_model.append((0.15, 0.25)) # F star
     #bounds_model.append((4., 20.))    # aR
     #bounds_model.append((10**3*3.*np.pi*4**3/(6.67408e-11*(per_planet*86400)**2), \
@@ -146,9 +145,10 @@ def transit_emcee(diz, ind):
     #bounds_model.append((0.95, 1.05)) # C
     bounds_model.append((1e-6, 4e-1)) # A
     #bounds_model.append((0.15, 0.2)) # xr F star
-    bounds_model.append((0.09, 0.11)) # K, M  # x0 = 0.1051
+    #bounds_model.append((0.09, 0.11)) # K, M  # x0 = 0.1051
     #bounds_model.append((0.08, 0.12)) # F
     bounds_model.append((1e-6, 1e-1)) # sigma
+
 
     # Initial values
     # ar K star: 8, M: 14, F:
@@ -166,12 +166,12 @@ def transit_emcee(diz, ind):
     #            0.5, 0.5, -1e-3, 1e-4, -1e-4, 1.
                 #10**3*3.*np.pi*10**3/(6.67408e-11*(per_planet*86400)**2), \
     #A, x0, sigma = 1e-3, 0.11, 1e-2
-    kr, t0, q1, q2, r0, r1 = 0.09, 0.1, 0.3, 0.3, -1e-3, -1e-4#, 1.
+    kr, q1, q2, r0, r1 = 0.09, 0.3, 0.3, -1e-3, -1e-4#, 1.
 
-    A, x0, sigma = 1e-3, 0.1051, 0.01
+    A, sigma = 1e-3, 0.01
     #initial_params = kr, t0, aR, i, q1, q2, r0, r1, r2, C, A, x0, sigma
     #initial_params = kr, t0, q1, q2, r0, r1, r2, C, A, x0, sigma
-    initial_params = kr, t0, q1, q2, r0, r1, A, x0, sigma
+    initial_params = kr, q1, q2, r0, r1, A, sigma
 
     options = {}
     options['maxiter'] = 100000
@@ -212,14 +212,14 @@ def transit_emcee(diz, ind):
     # Test that initial values are within priors
     if np.sum(p0[:, 0] < 0) > 0:
         p0[:, 0][p0[:, 0] < 0] = abs(p0[:, 0][p0[:, 0] < 0])
+    if np.sum(p0[:, 1] < 0) > 0:
+        p0[:, 1][p0[:, 1] < 0.] = abs(p0[:, 1][p0[:, 1] < 0.])
     if np.sum(p0[:, 2] < 0) > 0:
-        p0[:, 1][p0[:, 2] < 0.] = abs(p0[:, 2][p0[:, 2] < 0.])
-    if np.sum(p0[:, 3] < 0) > 0:
-        p0[:, 2][p0[:, 3] < 0.] = abs(p0[:, 3][p0[:, 3] < 0.])
+        p0[:, 3][p0[:, 2] < 0.] = abs(p0[:, 2][p0[:, 2] < 0.])
+    if np.sum(p0[:, -2] < 0) > 0:
+        p0[:, -2][p0[:, -2] <= 0] = abs(p0[:, -2][p0[:, -2] <= 0])
     if np.sum(p0[:, -1] < 0) > 0:
-        p0[:, -2][p0[:, -1] <= 0] = abs(p0[:, -1][p0[:, -1] <= 0])
-    if np.sum(p0[:, -3] < 0) > 0:
-        p0[:, -3][p0[:, -3] <= 0] = abs(p0[:, -3][p0[:, -3] <= 0])
+        p0[:, -1][p0[:, -1] <= 0] = abs(p0[:, -1][p0[:, -1] <= 0])
 
     nsteps = 1000
     width = 30
@@ -272,7 +272,7 @@ def transit_emcee(diz, ind):
             diz['chains_folder'] + 'entropy.p')
     #samples[:, 3] = np.degrees(samples[:, 3])
     titles = [r'$R_\mathrm{p}/R_\star$', \
-                    r'$t_0$', \
+                    #r'$t_0$', \
                     #r'$\rho_\star$', r'$\cos(i)$'
                     #r'$a/R_\star$', r'$i$', \
                     #r'$u_1$', r'$u_2$', \
@@ -281,7 +281,7 @@ def transit_emcee(diz, ind):
                     #r'$r_2$',
                     #r'$C$', \
                     r'$A_\mathrm{spot}$', \
-                    '$x_0$', \
+                    #'$x_0$', \
                     r'$\sigma_\mathrm{spot}$']
     truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
                         [None]*(len(titles) - 1)))
@@ -322,16 +322,16 @@ def lnprior(p):
 
     #kr, t0, aR, i, q1, q2, r0, r1, r2, C, A, x0, sigma = p
     #kr, t0, q1, q2, r0, r1, r2, C, A, x0, sigma = p
-    kr, t0, q1, q2, r0, r1, A, x0, sigma = p
+    kr, q1, q2, r0, r1, A, sigma = p
 
     # Some restrictions:
     #if i <= np.pi/2. and 0 <= q1 <= 1. and 0. <= q2 <= 1 and sigma >= 0. \
     if kr > 0 and 0 <= q1 <= 1. and 0. <= q2 <= 1 and 1e-3 < sigma \
-            and 1e-8 < A: # and 0.08 < x0 < 0.12:
+            and 1e-4 < A: # and 0.08 < x0 < 0.12:
                 #and var > 0: #and sigma < 5e-2 #and A > 1e-5 :
         #lnp_kr = lnp(kr, 0.1, ierrw[0])
         lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
-        #lnp_t0 = lnp(t0, 0.1, ierrw[1])
+        #lnp_t0 = lnp(t0, 0.1, 0.1)
         #lnp_aR = lnp(aR, 10., ierrw[2])
         #lnp_rho = lnp(rho, 1.5, ierrw[2])
         #lnp_i  = lnp(i, 89., ierrw[3])
@@ -351,7 +351,7 @@ def lnprior(p):
         lnp_C  = lnp(C, 1., ierrw[9])
         '''
         #lnp_A  = lnp(A, 5e-3, ierrw[10])
-        lnp_A = np.log(1./(A*np.log(0.01/1e-8))) # Jeffreys p
+        lnp_A = np.log(1./(A*np.log(0.01/1e-4))) # Jeffreys p
         #lnp_x0  = lnp(x0, 9e-2, ierrw[11])
         #lnp_sigma = lnp(sigma, 5e-3, ierrw[12])
         lnp_sigma = np.log(1./(sigma*np.log(0.02/1e-3))) # Jeffreys p
@@ -867,14 +867,14 @@ def transit_white(par, t):
     #alpha = 3.3219*np.log10(c/(1. - par[1]**0.5))
 
     # Back to u1, u2
-    u1 = 2.*par[2]**0.5*par[3]
-    u2 = par[2]**0.5*(1. - 2.*par[3])
+    u1 = 2.*par[1]**0.5*par[2]
+    u2 = par[1]**0.5*(1. - 2.*par[2])
 
     # From stellar density to aR*
     #aR = (6.67408e-11*1e-3*par[2]*(per_planet*86400)**2/(3*np.pi))**(1./3.)
     #print(aR)
     params = batman.TransitParams()
-    params.t0 = par[1]                #time of inferior conjunction
+    params.t0 = t0 #par[1]                #time of inferior conjunction
     params.per = per_planet           #orbital period
     params.rp = par[0]                #planet radius (in units of stellar radii)
     params.a = aR #par[2]                 #semi-major axis (in units of stellar radii)
@@ -906,12 +906,12 @@ def transit_syst(par, t):
 
 def transit_syst_spot(par, t):
      # instead of :6
-    model = (transit_white(par[:4], t) \
-                    + gauss(t, par[-3:]))*np.polyval(par[4  :-3], t)
+    #model = (transit_white(par[:4], t) \
+    #                + gauss(t, par[-3:]))*np.polyval(par[4  :-3], t)
     #model = (transit_white(par[:4], t) \
     #                + gauss(t, par[-2:]))*np.polyval(par[4 :-2], t)
-    #model = (transit_white(par[:3], t) \
-    #                + gauss(t, par[-2:]))*np.polyval(par[3 :-2], t)
+    model = (transit_white(par[:3], t) \
+                    + gauss(t, par[-2:]))*np.polyval(par[3 :-2], t)
 
     return model
 
@@ -959,8 +959,8 @@ def gauss(x, par):
     '''
     Par is defined as [A, x0, sigma]
     '''
-    A, x0, sigma = par
-    #A, sigma = par
+    #A, x0, sigma = par
+    A, sigma = par
     return A*np.exp(-0.5*(x - x0)**2/sigma**2)
 
 def starspot_size(diz, samples, channel):
