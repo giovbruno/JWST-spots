@@ -1,6 +1,6 @@
 import numpy as np
 import simulate_transit
-import transit_fit_fixt0
+import transit_fit_fixt0 as transit_fit
 import spectra_fit
 import os
 import pathlib
@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 from pdb import set_trace
 plt.ioff()
 
-def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr):
+def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
+        operation, models):
 
     # Folders & files
     pardict = {}
@@ -79,33 +80,37 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr):
     '''
     # Run process for JWST
     #simulate_transit.generate_spectrum_jwst(pardict)
-    #if instr == 'NIRCam':
-    #    uncfile1 = pardict['project_folder'] + pardict['instrument'] \
-    #        + '/dhs_snr_calcs/spec_p' \
-    #        + str(rplanet) + '_star' + str(rstar) + '_' \
-    #        + 'k' + str(magstar).replace('.', 'p') + '.dat'
-    #    w1, y1, yerr1 = np.loadtxt(uncfile1, unpack=True)
-    #    uncfile2 = pardict['project_folder'] + pardict['instrument'] \
-    #        + 'grism_snr_calcs/spec_p' \
-    #        + str(rplanet) + '_star' + str(rstar) + '_' \
-    #        + 'k' + str(magstar).replace('.', 'p') + '.dat'
-    #    w2, y2, yerr2 = np.loadtxt(uncfile2, unpack=True)
-    #    wmod = np.concatenate((w1, w2))
-    #    ymod = np.concatenate((y1, y2))
-    #    yerrmod = np.concatenate((yerr1, yerr2))
-    #totchan = simulate_transit.add_spots(pardict, 'jwst', \
-    #    simultr=list([wmod, ymod, yerrmod]))
+    if operation == 'simulate_transits':
+        if instr == 'NIRCam':
+            uncfile1 = pardict['project_folder'] + pardict['instrument'] \
+                + '/dhs_snr_calcs/spec_p' \
+                + str(rplanet) + '_star' + str(rstar) + '_' \
+                + 'k' + str(magstar).replace('.', 'p') + '.dat'
+            w1, y1, yerr1 = np.loadtxt(uncfile1, unpack=True)
+            uncfile2 = pardict['project_folder'] + pardict['instrument'] \
+                + 'grism_snr_calcs/spec_p' \
+                + str(rplanet) + '_star' + str(rstar) + '_' \
+                + 'k' + str(magstar).replace('.', 'p') + '.dat'
+            w2, y2, yerr2 = np.loadtxt(uncfile2, unpack=True)
+            wmod = np.concatenate((w1, w2))
+            ymod = np.concatenate((y1, y2))
+            yerrmod = np.concatenate((yerr1, yerr2))
+            totchan = simulate_transit.add_spots(pardict, 'jwst', \
+                simultr=list([wmod, ymod, yerrmod]))
     ## Channels to perform fit
     ##totchan = 14 # NIRSpec
     totchan = 30 # NIRCam DHS
-    #expchan = np.arange(totchan)
-    expchan = np.arange(26)
+    expchan = np.arange(totchan)
+    #expchan = np.arange(26)
     # Select channels and fit transit + spots
-    #transit_fit_fixt0.transit_spectro(pardict, expchan, 'jwst')
+    if operation == 'fit_transits':
+        transit_fit.transit_spectro(pardict, expchan, 'jwst')
     # Fit derived transit depth rise with stellar models
     #try:
-    spectra_fit.read_res(pardict, expchan, 'jwst', pardict['chains_folder'] \
-          + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_F322W2_')
+    elif operation == 'fit_spectra':
+        spectra_fit.read_res(pardict, expchan, 'jwst', pardict['chains_folder'] \
+          + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_F322W2_', \
+          models)
     #except FileNotFoundError:
     #    pass
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
@@ -118,9 +123,15 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr):
 
     return pardict
 
-def cycle(rplanet, rstar, tstar, loggstar, tcontrast, mags):
+def cycle(rplanet, rstar, tstar, loggstar, mags, instrum, \
+            simulate_transits=False, fit_transits=True, fit_spectra=True, \
+            models=['phoenix']):
     '''
     Run the simulations for several scenarios.
+
+    Parameters
+    ----------
+    models: 'phoenix', 'ck04models' or both
     '''
 
     # Stellar/planet pars
@@ -133,22 +144,35 @@ def cycle(rplanet, rstar, tstar, loggstar, tcontrast, mags):
     ip['loggstar'] = loggstar #4.5
     ip['tpenumbra'] = 5500
     #ip['instrument'] = 'NIRSpec_Prism'
-    ip['instrument'] = 'NIRCam'
+    ip['instrument'] = instrum
     #mags = np.linspace(10.5, 14.5, 5)
-    #tcontrast = np.arange(-1500, 0, 200) #for 5000 K
-    tcontrast = np.arange(-1000, 0, 200) #for 3500 K
+    if tstar == 5000:
+        tcontrast = np.arange(-1500, 0, 200) #for 5000 K
+    elif tstar == 3500:
+        tcontrast = np.arange(-1000, 0, 200) #for 3500 K
     #tcontrast = np.arange(-2000, 0, 400) # 6000 F star
+    opers = []
+    if simulate_transits:
+        opers.append('simulate_transits')
+    if fit_transits:
+        opers.append('fit_transits')
+    if fit_spectra:
+        opers.append('fit_spectra')
 
-    for mag in mags:
-        for td in tcontrast:
-            pardict = go(mag, ip['rplanet'], ip['tstar'], ip['tstar'] + td , \
-                ip['tpenumbra'], ip['loggstar'], ip['rstar'], ip['instrument'])
+    if len(opers) > 0:
+        for oper in opers:
+            for mag in mags:
+                for td in tcontrast:
+                    pardict = go(mag, ip['rplanet'], ip['tstar'], \
+                            ip['tstar'] + td , ip['tpenumbra'], \
+                            ip['loggstar'], ip['rstar'], \
+                            ip['instrument'], oper, models)
 
-    plot_res(ip, mags, tcontrast)
+    plot_res(ip, mags, tcontrast, models)
 
     return
 
-def plot_res(inputpars, mags, tcontrast):
+def plot_res(inputpars, mags, tcontrast, models):
     '''
     Build a 2d plot containing stellar mag, t diff input as axes and
     tdiff_output as color.
@@ -160,7 +184,7 @@ def plot_res(inputpars, mags, tcontrast):
     ytdiff = tcontrast
     tdiff_output = np.zeros((len(xmag), len(ytdiff)))
     #tdiff_output_abs = np.copy(tdiff_output)
-    for mod in ['phoenix']: #ck04models',
+    for mod in models:
         for i, mag in enumerate(mags):
             for j, td in enumerate(tcontrast):
                 tumbra = ip['tstar'] + tcontrast
@@ -180,19 +204,20 @@ def plot_res(inputpars, mags, tcontrast):
                     resfile.close()
                     tbest = sorted(zip(resdict[mag][mod].items()), \
                                     key=lambda x: x[0][1])[0][0][0]
-                    tdiff_output[i, j] = -(td - tbest)/(ip['tstar'] + td)*100
+                    #tdiff_output[i, j] = -(td - tbest)/(ip['tstar'] + td)*100
                     #tdiff_output_abs[i, j] = abs(td - tbest)/(ip['tstar'] + td)*100
+                    tdiff_output[i, j] = -(td - tbest)
                 except FileNotFoundError:
                     tdiff_output[i, j] = -999
         plt.figure()
         plt.imshow(tdiff_output.T[::-1], extent=(min(xmag), max(xmag), \
                     ip['tstar'] + ytdiff.min(), ip['tstar'] + ytdiff.max()), \
-                    aspect='auto')#, vmin=-35)#, interpolation='hanning')
+                    aspect='auto')#, interpolation='hanning')
         ll = plt.colorbar()
-        ll.set_label(r'$\Delta T_\mathrm{spot} \, [\%]$', fontsize=16)
+        ll.set_label(r'$\Delta T_\mathrm{spot}$', fontsize=16)
         plt.xlabel('K mag', fontsize=16)
         plt.ylabel('$T_\mathrm{spot}$ [K]', fontsize=16)
-        plt.title(str(ip['tstar']) + ' K star, ' + mod, fontsize=16)
+        plt.title(str(int(ip['tstar'])) + ' K star, ' + mod, fontsize=16)
         plt.show()
         plt.savefig(project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/accuracy_F322W2_' + mod + '.pdf')

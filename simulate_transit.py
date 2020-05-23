@@ -221,7 +221,10 @@ def add_spots(pardict, instrument, simultr=None):
         fix_dict['prot'] = 11.0   # Hebrard+2012
         fix_dict['incl'] = 90.
         fix_dict['posang'] = 0.
-        fix_dict['lat'] = 28 # 12umbra
+        if pardict['tstar'] == 3500:
+            fix_dict['lat'] = 28. # 12umbra
+        elif pardict['tstar'] == 5000:
+            fix_dict['lat'] = 12.
         fix_dict['latp'] = 12. # penumbra
         #fix_dict['rho'] = 1.7*1.408 #5000 K star ~ WASP-52
         #fix_dict['rho'] = 13.7*1.408 # 3500 K star ~ Kepler-1646
@@ -255,20 +258,30 @@ def add_spots(pardict, instrument, simultr=None):
         # Long, size
         #params[4], params[5] = 300., 5.0
         #params[4], params[5] = 270, 3. # K ??
-        params[4], params[5] = 260, 3.   # M
-        #params[4], params[5] = 250, 3. # K ??
+        if pardict['tstar'] == 3500 or pardict['tstar'] == 5000:
+            params[4], params[5] = 260, 3.   # M
+        #elif pardict['tstar'] == 5000:
+        #    params[4], params[5] = 250, 3. # K ??
         # Contrast
-        wl = fits.open(modelsfolder \
-                    +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
-        starm = fits.open(modelsfolder + 'lte0' + str(int(pardict['tstar'])) \
-                    + '-' + '{:3.2f}'.format(pardict['loggstar']) \
-                    + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
-        umbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tumbra'])) \
-                    + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
-                    + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
-        penumbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tpenumbra'])) \
-                    + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
-                    + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+        modstar = pysynphot.Icat('phoenix', pardict['tstar'], 0.0, \
+                            pardict['loggstar'])
+        wl = modstar.wave
+        starm = modstar.flux
+        umbram =  pysynphot.Icat('phoenix', pardict['tumbra'], 0.0, \
+                            pardict['loggstar'] - 0.5).flux
+        penumbram = pysynphot.Icat('phoenix', pardict['tpenumbra'], 0.0, \
+                            pardict['loggstar'] - 0.5).flux
+        #wl = fits.open(modelsfolder \
+        #            +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
+        #starm = fits.open(modelsfolder + 'lte0' + str(int(pardict['tstar'])) \
+        #            + '-' + '{:3.2f}'.format(pardict['loggstar']) \
+        #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+        #umbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tumbra'])) \
+        #            + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
+        #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+        #penumbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tpenumbra'])) \
+        #            + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
+        #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
         contrast = umbram/starm
         contrastp = penumbram/starm
         if i == 0:
@@ -282,6 +295,9 @@ def add_spots(pardict, instrument, simultr=None):
         wlcenter = np.mean([chanleft, chanright]) #* u.micrometer
         wlbin = np.logical_and(wl*1e-4 >= chanleft, wl*1e-4 <= chanright)
         params[6] = 1. - np.mean(contrast[wlbin]) # Contrast spot 1
+        # Some numberical problems in the models?
+        if params[6] < 0.:
+            params[6] = 1e-6
         # Spot 2
         params[7] = params[4] - 2
         params[8] = 12.#params[5]*2.4 # see reference in notes
@@ -301,6 +317,7 @@ def add_spots(pardict, instrument, simultr=None):
         #relsigma_i = np.zeros(len(tt)) + relsigma[i]/(2.*(yobs[i]**0.5))
         plt.close('all')
         plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
+        #set_trace()
         '''
         flagv = np.logical_and(tt > 0.07491, tt < 0.084)
         flago = np.logical_and(tt > 0.07264, tt < 0.08986)
