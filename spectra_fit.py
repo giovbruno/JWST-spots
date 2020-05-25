@@ -4,7 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.optimize import least_squares
+from scipy.signal import medfilt
 import get_uncertainties as getunc
+import simulate_transit
 import rebin
 import pysynphot
 import glob
@@ -16,15 +18,24 @@ modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
 
 plt.ioff()
 
-def read_res(pardict, ind, instrument, plotname, resfile, models):
+def read_res(pardict, instrument, plotname, resfile, models):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
     wlwin: used to exlude parts of the spectra
     '''
+
+    ldfile = open(pardict['project_folder'] \
+        + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
+                        + 'K/' + 'LDcoeffs.pic', 'rb')
+    ldd = pickle.load(ldfile)
+    expchan = len(ldd)
+    ldfile.close()
+
     wl, A, x0, sigma = [], [], [], []
     yerrup, yerrdown = [], []
-    for i in ind:
+    kr, krunc = [], []
+    for i in np.arange(expchan):
         #ffopen = open(pardict['chains_folder'] + 'chains_' \
         #            + str(i) + '.pickle', 'rb')
         ffopen = open(pardict['chains_folder'] + 'sol_LM_' + str(i) \
@@ -50,19 +61,36 @@ def read_res(pardict, ind, instrument, plotname, resfile, models):
         yerrup.append(res['1sigma_unc'][-2]*1e6)
         yerrdown.append(res['1sigma_unc'][-2]*1e6)
         ffopen.close()
+        kr.append(res['sol'].x[0])
+        krunc.append(res['1sigma_unc'][0])
+
+    # Compare with initial simulation
+    plt.figure(42)
+    kr = np.array(kr)
+    krunc = np.array(krunc)
+    xobs, yobs, yobs_err \
+            = simulate_transit.read_pandexo_results(pardict, instrument, res=10)
+    plt.errorbar(wl, kr**2, yerr=2.*kr*krunc, fmt='o', label='fit')
+    plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o', label='simulated')
+    plt.legend()
+    plt.savefig(pardict['chains_folder'] + 'compare_kr.pdf')
+    plt.close('all')
     # Group stuff together
     #A = np.vstack(A)
     #x0 = np.vstack(x0)
     #sigma = np.vstack(sigma)
     wl = np.array(wl)
-    flag = wl < 4.
+    if pardict['instrument'] == 'NIRCam/':
+        flag = wl < 4.
+    elif pardict['instrument'] == 'NIRSpec_Prism/':
+        flag = wl < 6.
     wl = wl[flag]
     A = np.array(A)[flag]
     sigma = np.array(sigma)[flag]
     yerrup = np.array(yerrup)[flag]
     yerrdown = np.array(yerrdown)[flag]
 
-    res = int(3./np.diff(wl)[0])
+    res = np.diff(wl)[0] #int(3./np.diff(wl)[0])
 
     #for i in np.arange(len(A)):
     #    #if A[i, 1] > 0:
@@ -98,9 +126,9 @@ def read_res(pardict, ind, instrument, plotname, resfile, models):
         dict_results[pm] = {}
         dict_results[pm][stmod] = {}
         if pardict['tstar'] == 3500:
-            tspot_ = np.arange(2300, 4000, 200)
+            tspot_ = np.arange(2300, 3400, 200)
         else:
-            tspot_ = np.arange(3500, 5500, 200)
+            tspot_ = np.arange(3500, 4900, 200)
         tspot_ = tspot_[tspot_ != pardict['tstar']]
         chi2red = np.zeros(len(tspot_)) + np.inf
         plt.figure()
@@ -121,11 +149,13 @@ def read_res(pardict, ind, instrument, plotname, resfile, models):
             for j in np.arange(len(yerrup)):
                 yerrfit.append(max([yerrup[j], yerrdown[j]]))
             yerrfit = np.array(yerrfit)
-            soln = least_squares(scalespec, [1., 0.], args=(specA, A, yerrfit))
+            boundsm = ([0, -np.inf], [np.inf, np.inf])
+            soln = least_squares(scalespec, [1., 0.], \
+                        bounds=boundsm, args=(specA, A, yerrfit))
             #scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
             print(temp, 'K Spectrum scaling factor:', soln.x)#, '+/-', \
             #                    scale_unc[0])
-            plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp))
+            plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp), alpha=.5)
             chi2red[i] = np.sum((A - soln.x[0]*specA - soln.x[1])**2/yerrfit**2) \
                             /(len(yerrfit) - 1)
             dict_results[pm][stmod][temp - pardict['tstar']] = chi2red[i]
@@ -139,7 +169,7 @@ def read_res(pardict, ind, instrument, plotname, resfile, models):
            + str(np.round(chi2red[chi2min], 2)) \
            + r', $T_\mathrm{spot}=$' + str(tspot_[chi2min]) + ' K', fontsize=16)
         plt.xlim(0.5, 5.5)
-        plt.ylim(0., 3000)
+        plt.ylim(0., 5000)
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
         plt.close('all')
 
@@ -179,8 +209,16 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
     #        + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
     # Reduce resolution to the one of the transmission spetrum
 
-    wnew = rebin.rebin_wave(wave, res)
-    rebstar, errstar = rebin.rebin_spectrum(star, wave, wnew, unc=0.)
+    #wnew = rebin.rebin_wave(wave, res)
+    #rebstar, errstar = rebin.rebin_spectrum(star, wave, wnew, unc=[0.])
+    #if int(res*1e4/2) % 2 == 1:
+    #    kern = int(res*1e4/2.)
+    #else:
+    #    kern = int(res*1e4/2.) - 1
+    kern = 7
+    wnew = wave[::kern]
+    rebstar = medfilt(star, kernel_size=kern)[::kern]
+
     # Increase errors (based on ETC?)
     #errstar += rebstar*abs(np.random.normal(loc=0., scale=5.5e-3, \
     #                        size=len(errstar)))
@@ -194,7 +232,8 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
         #            + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
         #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
         specnew = spot#(1 - ffact)*star + ffact*spot
-        rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
+        #rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
+        rebnew = medfilt(specnew, kernel_size=kern)[::kern]
         #errnew += rebnew*abs(np.random.normal(loc=0., scale=5.5e-3,\
         #                size=len(errnew)))
         # Compare plots

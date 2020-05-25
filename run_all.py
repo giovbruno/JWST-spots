@@ -33,9 +33,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     pardict['chains_folder']  = pardict['case_folder'] + 'MCMC/'
     if not os.path.exists(pardict['chains_folder']):
         os.mkdir(pardict['chains_folder'])
-    #pardict['pandexo_out'] = pardict['data_folder'] + 'singlerun_1transit.p'
-    pardict['pandexo_out'] = \
-    '/home/giovanni/Dropbox/Projects/jwst_spots/NIRCam/star_5000K/PandExo_F322W2_k3.5.pic'
+
     #pardict['pandexo_out_hst'] = pardict['data_folder'] + 'singlerun_hst.p'
     pardict['logfile_data'] = pardict['data_folder'] + 'logfile.log'
     pardict['logfile_chains'] = pardict['chains_folder'] + 'logfile.log'
@@ -51,24 +49,27 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     pardict['pplanet'] = 2. # K star
     #pardict['pplanet'] = 5. # M star
     pardict['planettype'] = 'constant'
-    '''
-    pardict['ldfile_quadratic'] = pardict['project_folder'] + 'ldfiles/' \
-        + str(int(pardict['tstar'])) + '_' \
-        + str(np.round(pardict['loggstar'], 1)) \
-        + '_0.0_tophat_14ch_quadratic_kurucz.txt'
-    pardict['ldfile_nonlinear'] = pardict['project_folder'] + 'ldfiles/' \
-        + str(int(pardict['tstar'])) + '_' \
-        + str(np.round(pardict['loggstar'], 1)) \
-        + '_0.0_tophat_14ch_nonlinear_kurucz.txt'
-    '''
-    pardict['ldfile_quadratic_blue'] = pardict['project_folder'] + 'ldfiles/' \
-        + str(int(pardict['tstar'])) + '_' \
-        + str(np.round(pardict['loggstar'], 1)) \
-        + '_0.0_F150W2_15ch_quadratic_phoenix.txt'
-    pardict['ldfile_quadratic_red'] = pardict['project_folder'] + 'ldfiles/' \
-        + str(int(pardict['tstar'])) + '_' \
-        + str(np.round(pardict['loggstar'], 1)) \
-        + '_0.0_F322W2_15ch_quadratic_phoenix.txt'
+    if instr == 'NIRSpec_Prism':
+        pardict['pandexo_out_jwst'] = pardict['data_folder'] + 'singlerun_1transit.p'
+        pardict['ldfile_quadratic'] = pardict['project_folder'] + 'ldfiles/' \
+            + str(int(pardict['tstar'])) + '_' \
+            + str(np.round(pardict['loggstar'], 1)) \
+            + '_0.0_tophat_30ch_quadratic_kurucz.txt'
+        pardict['ldfile_nonlinear'] = pardict['project_folder'] + 'ldfiles/' \
+            + str(int(pardict['tstar'])) + '_' \
+            + str(np.round(pardict['loggstar'], 1)) \
+            + '_0.0_tophat_30ch_nonlinear_kurucz.txt'
+    elif instr == 'NIRCam':
+        pardict['pandexo_out_jwst'] = \
+        '/home/giovanni/Dropbox/Projects/jwst_spots/NIRCam/star_5000K/PandExo_F322W2_k3.5.pic'
+        pardict['ldfile_quadratic_blue'] = pardict['project_folder'] \
+            + 'ldfiles/' + str(int(pardict['tstar'])) + '_' \
+            + str(np.round(pardict['loggstar'], 1)) \
+            + '_0.0_F150W2_15ch_quadratic_phoenix.txt'
+        pardict['ldfile_quadratic_red'] = pardict['project_folder'] \
+            + 'ldfiles/' + str(int(pardict['tstar'])) + '_' \
+            + str(np.round(pardict['loggstar'], 1)) \
+            + '_0.0_F322W2_15ch_quadratic_phoenix.txt'
     # Check
     ''''
     if pathlib.Path(pardict['logfile_data']).exists() or \
@@ -79,9 +80,11 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
         os.system('rm ' + pardict['logfile_chains'])
     '''
     # Run process for JWST
-    #simulate_transit.generate_spectrum_jwst(pardict)
-    if operation == 'simulate_transits':
-        if instr == 'NIRCam':
+    if 'simulate_transits' in operation:
+        if instr == 'NIRSpec_Prism':
+            #simulate_transit.generate_spectrum_jwst(pardict)
+            totchan = simulate_transit.add_spots(pardict, 'jwst')
+        elif instr == 'NIRCam':
             uncfile1 = pardict['project_folder'] + pardict['instrument'] \
                 + '/dhs_snr_calcs/spec_p' \
                 + str(rplanet) + '_star' + str(rstar) + '_' \
@@ -99,16 +102,16 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
                 simultr=list([wmod, ymod, yerrmod]))
     ## Channels to perform fit
     ##totchan = 14 # NIRSpec
-    totchan = 30 # NIRCam DHS
-    expchan = np.arange(totchan)
+    #totchan = 30 # NIRCam DHS
+    #expchan = np.arange(totchan)
     #expchan = np.arange(26)
     # Select channels and fit transit + spots
-    if operation == 'fit_transits':
-        transit_fit.transit_spectro(pardict, expchan, 'jwst')
+    if 'fit_transits' in operation:
+        transit_fit.transit_spectro(pardict, 'jwst')
     # Fit derived transit depth rise with stellar models
     #try:
-    elif operation == 'fit_spectra':
-        spectra_fit.read_res(pardict, expchan, 'jwst', pardict['chains_folder'] \
+    if 'fit_spectra' in operation:
+        spectra_fit.read_res(pardict, 'jwst', pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_F322W2_', \
           models)
     #except FileNotFoundError:
@@ -123,7 +126,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
 
     return pardict
 
-def cycle(rplanet, rstar, tstar, loggstar, mags, instrum, \
+def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
             models=['phoenix']):
     '''
@@ -145,7 +148,10 @@ def cycle(rplanet, rstar, tstar, loggstar, mags, instrum, \
     ip['tpenumbra'] = 5500
     #ip['instrument'] = 'NIRSpec_Prism'
     ip['instrument'] = instrum
-    #mags = np.linspace(10.5, 14.5, 5)
+    if instrum == 'NIRCam':
+        mags = [4.5, 6.0, 7.5, 9.0]
+    elif instrum == 'NIRSpec_Prism':
+        mags = np.linspace(10.5, 14.5, 5)
     if tstar == 5000:
         tcontrast = np.arange(-1500, 0, 200) #for 5000 K
     elif tstar == 3500:
@@ -160,13 +166,12 @@ def cycle(rplanet, rstar, tstar, loggstar, mags, instrum, \
         opers.append('fit_spectra')
 
     if len(opers) > 0:
-        for oper in opers:
-            for mag in mags:
-                for td in tcontrast:
-                    pardict = go(mag, ip['rplanet'], ip['tstar'], \
+        for mag in mags:
+            for td in tcontrast:
+                pardict = go(mag, ip['rplanet'], ip['tstar'], \
                             ip['tstar'] + td , ip['tpenumbra'], \
                             ip['loggstar'], ip['rstar'], \
-                            ip['instrument'], oper, models)
+                            ip['instrument'], opers, models)
 
     plot_res(ip, mags, tcontrast, models)
 

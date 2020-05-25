@@ -32,7 +32,7 @@ ierrw = np.array([1e-1, 1e-1, 5.0, 1.0, 0.5, 0.5, 1., 1., 1., 0.05, 1e-1, \
 ierrs = np.array([1e-3, 0.1, 0.1, 1., 0.05])
 
 # For all spectral bands
-def transit_spectro(pardict, expchan, instrument):
+def transit_spectro(pardict, instrument):
     '''
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
@@ -58,9 +58,15 @@ def transit_spectro(pardict, expchan, instrument):
 
     #ldw = [ua[-1], ub[-1]]
 
+    ldfile = open(pardict['project_folder'] \
+        + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
+                    + 'K/' + 'LDcoeffs.pic', 'rb')
+    ldd = pickle.load(ldfile)
+    expchan = len(ldd)
+    ldfile.close()
     # Save results
     diz_res = {}
-    for i in expchan:
+    for i in np.arange(expchan):
         #try:
         samples_blue, spot1 = transit_emcee(pardict, int(i))
         diz_res[i] = spot1
@@ -197,7 +203,7 @@ def transit_emcee(diz, ind):
     #options['approx_grad'] = True
     options= {}
     global ftol
-    ftol = 1e-11
+    ftol = 1e-10
     options['ftol'] = ftol
     nll = lambda *args: -lnlike_white(*args)
     if wl <= 2.5:
