@@ -158,7 +158,7 @@ def read_pandexo_results(pardict, instrument, res=4):
 
     return xobs, yobs, yobs_err
 
-def add_spots(pardict, instrument, simultr=None):
+def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
     '''
     Parameters
     ----------
@@ -171,14 +171,19 @@ def add_spots(pardict, instrument, simultr=None):
 
     if simultr == None:
         xobs, yobs, yobs_err \
-                    = read_pandexo_results(pardict, instrument, res=10)
+                    = read_pandexo_results(pardict, instrument, res=resol)
+        #xobs -= 0.5
+        flag = xobs < 6.5
+        xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
+        #yobs_err /= 2.
+
         # Rebin from resolution 100 to res
         #xobs = rebin.rebin_wave(xobs_, 70)
         #yobs, yobs_err = rebin.rebin_spectrum(yobs_, xobs_, xobs, unc=yobs_err_)
     elif type(simultr) == 'str' and rsimultr.endswith('+'):
         xobs1, yobs1, yobs_err1 = np.loadtxt(uncert_file[:-1], unpack=True)
         xobs2, yobs2, yobs_err2 = read_pandexo_results(pardict, instrument, \
-                                    res=15)
+                                    res=resol)
         xobs = np.concatenate((xobs1, xobs2))
         yobs = np.concatenate((yobs1, yobs2))
         yobs_err = np.concatenate((yobs_err1, yobs_err2))
@@ -190,10 +195,23 @@ def add_spots(pardict, instrument, simultr=None):
 
     # Calculate LD coefficients
     LDcoeffs = []
-    if pardict['magstar'] == 4.5 or pardict['magstar'] == 10.5 \
+    if pardict['instrument'] == 'NIRSpec_Prism/':
+        thrfile = 'None'
+        ldendname = 'prism'
+    elif pardict['instrument'] == 'NIRCam/':
+        if xobs < 2.5:
+            thrfile \
+            = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F150W2.dat'
+            ldendname = 'nircam_blue'
+        else:
+            thrfile \
+            = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F322W2.dat'
+            ldendname = 'nircam_red'
+
+    if (pardict['magstar'] == 4.5 or pardict['magstar'] == 10.5) \
         and not pathlib.Path(pardict['project_folder'] \
                 + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
-                            + 'K/' + 'LDcoeffs.pic').exists():
+                            + 'K/' + 'LDcoeffs_' + ldendname + '.pic').exists():
         print('Computing LD coefficients...')
         for i in np.arange(len(xobs)):
             if i < len(xobs) - 2:
@@ -203,18 +221,18 @@ def add_spots(pardict, instrument, simultr=None):
                 wl_bin_low = xobs[i] - np.diff(xobs)[i - 1]/2.
                 wl_bin_up = xobs[i] + np.diff(xobs)[i - 1]/2.
             ww_, LDcoeffs_ = ld_coeffs.fit_law(pardict['tstar'], \
-                pardict['loggstar'], 0.0, thrfile=None, grid='phoenix', \
-                wlmin=wl_bin_low, wlmax=wl_bin_up, nchannels=2, plots=False)
+                pardict['loggstar'], 0.0, thrfile=thrfile, grid='phoenix', \
+                wlmin=wl_bin_low, wlmax=wl_bin_up, nchannels=1, plots=False)
             LDcoeffs.append(LDcoeffs_)
         ldout = open(pardict['project_folder'] \
             + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
-                        + 'K/' + 'LDcoeffs.pic', 'wb')
+                        + 'K/' + 'LDcoeffs_' + ldendname +  '.pic', 'wb')
         pickle.dump(LDcoeffs, ldout)
         ldout.close()
 
     ldd = open(pardict['project_folder'] \
             + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
-                        + 'K/' + 'LDcoeffs.pic', 'rb')
+                        + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
     ldlist = pickle.load(ldd)
     ldd.close()
     #flag = xobs < 3.
@@ -303,7 +321,7 @@ def add_spots(pardict, instrument, simultr=None):
         #        pardict['loggstar'], 0.0, thrfile=None, grid='phoenix', \
         #        wlmin=wl_bin_low, wlmax=wl_bin_up, nchannels=2, plots=False)
         params[2], params[3] = ldlist[i][0], ldlist[i][1]
-
+        #params[2], params[3] = 0.3, 0.3
         #params[2], params[3] = ua[i], ub[i]
         #params[2], params[3] = 0.2, 0.2
         # Long, size
@@ -314,13 +332,13 @@ def add_spots(pardict, instrument, simultr=None):
         #elif pardict['tstar'] == 5000:
         #    params[4], params[5] = 250, 3. # K ??
         # Contrast
-        modstar = pysynphot.Icat('phoenix', pardict['tstar'], 0.0, \
+        modstar = pysynphot.Icat(models[0], pardict['tstar'], 0.0, \
                             pardict['loggstar'])
         wl = modstar.wave
         starm = modstar.flux
-        umbram =  pysynphot.Icat('phoenix', pardict['tumbra'], 0.0, \
+        umbram =  pysynphot.Icat(models[0], pardict['tumbra'], 0.0, \
                             pardict['loggstar'] - 0.5).flux
-        penumbram = pysynphot.Icat('phoenix', pardict['tpenumbra'], 0.0, \
+        penumbram = pysynphot.Icat(models[0], pardict['tpenumbra'], 0.0, \
                             pardict['loggstar'] - 0.5).flux
         #wl = fits.open(modelsfolder \
         #            +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
@@ -335,6 +353,7 @@ def add_spots(pardict, instrument, simultr=None):
         #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
         contrast = umbram/starm
         contrastp = penumbram/starm
+
         if i == 0:
             chanleft = xobs[i] ##wl.min()*1e-4
         else:

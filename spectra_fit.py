@@ -18,19 +18,24 @@ modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
 
 plt.ioff()
 
-def read_res(pardict, instrument, plotname, resfile, models):
+def read_res(pardict, instrument, plotname, resfile, models, resol=10):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
     wlwin: used to exlude parts of the spectra
     '''
 
-    ldfile = open(pardict['project_folder'] \
-        + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
-                        + 'K/' + 'LDcoeffs.pic', 'rb')
-    ldd = pickle.load(ldfile)
-    expchan = len(ldd)
-    ldfile.close()
+    #ldfile = open(pardict['project_folder'] \
+    #    + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
+    #                    + 'K/' + 'LDcoeffs_prism.pic', 'rb')
+    #ldd = pickle.load(ldfile)
+    xobs, yobs, yobs_err \
+            = simulate_transit.read_pandexo_results(pardict, instrument, \
+                res=resol)
+    #xobs -= 0.3
+    flag = xobs < 6
+    expchan = len(xobs[flag])
+    #ldfile.close()
 
     wl, A, x0, sigma = [], [], [], []
     yerrup, yerrdown = [], []
@@ -68,13 +73,11 @@ def read_res(pardict, instrument, plotname, resfile, models):
     plt.figure(42)
     kr = np.array(kr)
     krunc = np.array(krunc)
-    xobs, yobs, yobs_err \
-            = simulate_transit.read_pandexo_results(pardict, instrument, res=10)
-    plt.errorbar(wl, kr**2, yerr=2.*kr*krunc, fmt='o', label='fit')
-    plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o', label='simulated')
-    plt.legend()
-    plt.savefig(pardict['chains_folder'] + 'compare_kr.pdf')
-    plt.close('all')
+    #plt.errorbar(wl, kr**2, yerr=2.*kr*krunc, fmt='o', label='fit')
+    #plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o', label='simulated')
+    #plt.legend()
+    #plt.savefig(pardict['chains_folder'] + 'compare_kr.pdf')
+    #plt.close('all')
     # Group stuff together
     #A = np.vstack(A)
     #x0 = np.vstack(x0)
@@ -126,13 +129,13 @@ def read_res(pardict, instrument, plotname, resfile, models):
         dict_results[pm] = {}
         dict_results[pm][stmod] = {}
         if pardict['tstar'] == 3500:
-            tspot_ = np.arange(2300, 3400, 200)
+            tspot_ = np.arange(2300, 3400, 100)
         else:
-            tspot_ = np.arange(3500, 4900, 200)
+            tspot_ = np.arange(3500, 4900, 100)
         tspot_ = tspot_[tspot_ != pardict['tstar']]
         chi2red = np.zeros(len(tspot_)) + np.inf
         plt.figure()
-        plt.errorbar(wl, A, yerr=[yerrup, yerrdown], fmt='ko')
+        plt.errorbar(wl, A, yerr=[yerrup, yerrdown], fmt='ko', mfc='None')
         plt.title('$A$', fontsize=16)
         print('Fitting ' + stmod + ' models...')
         # Get spectra with starspot contamination and perform LM fit
@@ -149,14 +152,15 @@ def read_res(pardict, instrument, plotname, resfile, models):
             for j in np.arange(len(yerrup)):
                 yerrfit.append(max([yerrup[j], yerrdown[j]]))
             yerrfit = np.array(yerrfit)
-            boundsm = ([0, -np.inf], [np.inf, np.inf])
-            soln = least_squares(scalespec, [1., 0.], \
+            boundsm = ([0.], [np.inf])
+            soln = least_squares(scalespec, [1.], \
                         bounds=boundsm, args=(specA, A, yerrfit))
             #scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
-            print(temp, 'K Spectrum scaling factor:', soln.x)#, '+/-', \
+            print(temp, 'K Spectrum scaling factor:', soln.x[0])#, '+/-', \
             #                    scale_unc[0])
-            plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp), alpha=.5)
-            chi2red[i] = np.sum((A - soln.x[0]*specA - soln.x[1])**2/yerrfit**2) \
+            plt.plot(ww, soln.x[0]*spec, label=str(temp), alpha=.5)
+            #plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp), alpha=.5)
+            chi2red[i] = np.sum((A - soln.x[0]*specA)**2/yerrfit**2) \
                             /(len(yerrfit) - 1)
             dict_results[pm][stmod][temp - pardict['tstar']] = chi2red[i]
         #plt.legend(frameon=False, loc='best', fontsize=16)
@@ -168,8 +172,8 @@ def read_res(pardict, instrument, plotname, resfile, models):
         plt.title(stmod + r', $\min (\tilde{\chi}^2)=$' \
            + str(np.round(chi2red[chi2min], 2)) \
            + r', $T_\mathrm{spot}=$' + str(tspot_[chi2min]) + ' K', fontsize=16)
-        plt.xlim(0.5, 5.5)
-        plt.ylim(0., 5000)
+        plt.xlim(wl.min() - 0.2, wl.max() + 0.2)
+        plt.ylim(0., 6000)
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
         plt.close('all')
 
@@ -183,7 +187,8 @@ def scalespec(x, spec, y, yerr):
     '''
     Distance between model spectrum and data.
     '''
-    return (x[0]*spec + x[1] - y)**2/yerr**2
+    return (x[0]*spec - y)**2/yerr**2
+    #return (x[0]*spec + x[1] - y)**2/yerr**2
 
 def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
     '''
@@ -215,10 +220,10 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
     #    kern = int(res*1e4/2.)
     #else:
     #    kern = int(res*1e4/2.) - 1
-    kern = 7
+    kern = 5
     wnew = wave[::kern]
     rebstar = medfilt(star, kernel_size=kern)[::kern]
-
+    rebstar[rebstar < 1e-6] = 0.
     # Increase errors (based on ETC?)
     #errstar += rebstar*abs(np.random.normal(loc=0., scale=5.5e-3, \
     #                        size=len(errstar)))
@@ -234,18 +239,25 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
         specnew = spot#(1 - ffact)*star + ffact*spot
         #rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
         rebnew = medfilt(specnew, kernel_size=kern)[::kern]
+        rebnew[rebnew < 1e-6] = 0.
+        #plt.plot(spot)
+        #plt.plot(star)
+        #plt.plot(rebnew/rebstar)
+        #plt.show()
+        #set_trace()
         #errnew += rebnew*abs(np.random.normal(loc=0., scale=5.5e-3,\
         #                size=len(errnew)))
         # Compare plots
         #plt.errorbar(wnew/10., rebnew, yerr=errnew, label=str(i))
         # As Sing+2011
-        wref = np.logical_and(39000 < wnew, wnew < 41000)
+        wref = np.logical_and(6000 < wnew, wnew < 7000)
         #wref = np.logical_and(24000 < wnew, wnew < 25000)
         spotref = rebnew[wref]
         starref = rebstar[wref]
         fref = 1. - np.mean(spotref/starref)
         rise = (1. - rebnew/rebstar)/fref
-        rise2 = (1. - specnew/star)/fref
+        #rise2 = (1. - specnew/star)/fref
+        #set_trace()
         #plt.figure()
         #set_trace()
         #plt.plot(wnew*1e-4, rebstar)
@@ -264,8 +276,8 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
     plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
     plt.ylabel('Flux rise [Relative values]', fontsize=16)
     #plt.xlim(0.6, 5)
-    #plt.ylim(-4, 10)
-
+    #plt.ylim(1500, 6500)
+    #plt.show()
     flag = np.logical_or(np.isnan(wnew), np.isnan(rise))
 
     return wnew[~flag], rise[~flag]

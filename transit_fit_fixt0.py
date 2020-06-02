@@ -8,6 +8,7 @@ import emcee
 import os, sys, pickle, glob, logging, pathlib
 from astropy.io import fits
 from emcee.autocorr import integrated_time
+import simulate_transit
 #from pytransit import QuadraticModel
 import batman
 from astropy import constants as const
@@ -32,7 +33,7 @@ ierrw = np.array([1e-1, 1e-1, 5.0, 1.0, 0.5, 0.5, 1., 1., 1., 0.05, 1e-1, \
 ierrs = np.array([1e-3, 0.1, 0.1, 1., 0.05])
 
 # For all spectral bands
-def transit_spectro(pardict, instrument):
+def transit_spectro(pardict, instrument, resol=10):
     '''
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
@@ -58,12 +59,18 @@ def transit_spectro(pardict, instrument):
 
     #ldw = [ua[-1], ub[-1]]
 
-    ldfile = open(pardict['project_folder'] \
-        + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
-                    + 'K/' + 'LDcoeffs.pic', 'rb')
-    ldd = pickle.load(ldfile)
-    expchan = len(ldd)
-    ldfile.close()
+    #ldfile = open(pardict['project_folder'] \
+    #    + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
+    #                + 'K/' + 'LDcoeffs_prism.pic', 'rb')
+    #ldd = pickle.load(ldfile)
+    xobs, yobs, yobs_err \
+            = simulate_transit.read_pandexo_results(pardict, instrument, \
+                res=resol)
+    #xobs -= 0.5
+    flag = xobs < 6
+    expchan = len(xobs[flag])
+
+    #ldfile.close()
     # Save results
     diz_res = {}
     for i in np.arange(expchan):

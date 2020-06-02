@@ -10,7 +10,7 @@ from pdb import set_trace
 plt.ioff()
 
 def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
-        operation, models):
+        operation, models, res=10):
 
     # Folders & files
     pardict = {}
@@ -83,7 +83,8 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     if 'simulate_transits' in operation:
         if instr == 'NIRSpec_Prism':
             #simulate_transit.generate_spectrum_jwst(pardict)
-            totchan = simulate_transit.add_spots(pardict, 'jwst')
+            totchan = simulate_transit.add_spots(pardict, 'jwst', resol=res, \
+                    models=models)
         elif instr == 'NIRCam':
             uncfile1 = pardict['project_folder'] + pardict['instrument'] \
                 + '/dhs_snr_calcs/spec_p' \
@@ -98,22 +99,18 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
             wmod = np.concatenate((w1, w2))
             ymod = np.concatenate((y1, y2))
             yerrmod = np.concatenate((yerr1, yerr2))
-            totchan = simulate_transit.add_spots(pardict, 'jwst', \
-                simultr=list([wmod, ymod, yerrmod]))
-    ## Channels to perform fit
-    ##totchan = 14 # NIRSpec
-    #totchan = 30 # NIRCam DHS
-    #expchan = np.arange(totchan)
-    #expchan = np.arange(26)
+            totchan = simulate_transit.add_spots(pardict, 'jwst', resol=res, \
+                simultr=list([wmod, ymod, yerrmod]), models=models)
+
     # Select channels and fit transit + spots
     if 'fit_transits' in operation:
-        transit_fit.transit_spectro(pardict, 'jwst')
+        transit_fit.transit_spectro(pardict, 'jwst', resol=res)
     # Fit derived transit depth rise with stellar models
     #try:
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, 'jwst', pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_F322W2_', \
-          models)
+          models, resol=res)
     #except FileNotFoundError:
     #    pass
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
@@ -128,7 +125,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
 
 def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
-            models=['phoenix']):
+            models=['phoenix'], res=10):
     '''
     Run the simulations for several scenarios.
 
@@ -152,8 +149,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         mags = [4.5, 6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
+        #mags = [14.5]
     if tstar == 5000:
         tcontrast = np.arange(-1500, 0, 200) #for 5000 K
+        #tcontrast = np.array([-300])
     elif tstar == 3500:
         tcontrast = np.arange(-1000, 0, 200) #for 3500 K
     #tcontrast = np.arange(-2000, 0, 400) # 6000 F star
@@ -171,7 +170,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 pardict = go(mag, ip['rplanet'], ip['tstar'], \
                             ip['tstar'] + td , ip['tpenumbra'], \
                             ip['loggstar'], ip['rstar'], \
-                            ip['instrument'], opers, models)
+                            ip['instrument'], opers, models, res=res)
 
     plot_res(ip, mags, tcontrast, models)
 
@@ -225,6 +224,6 @@ def plot_res(inputpars, mags, tcontrast, models):
         plt.title(str(int(ip['tstar'])) + ' K star, ' + mod, fontsize=16)
         plt.show()
         plt.savefig(project_folder + instrument + 'star_' \
-                + str(int(ip['tstar'])) + 'K/accuracy_F322W2_' + mod + '.pdf')
+                + str(int(ip['tstar'])) + 'K/accuracy_' + mod + '.pdf')
 
     return
