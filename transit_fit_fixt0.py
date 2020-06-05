@@ -63,10 +63,19 @@ def transit_spectro(pardict, instrument, resol=10):
     #    + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
     #                + 'K/' + 'LDcoeffs_prism.pic', 'rb')
     #ldd = pickle.load(ldfile)
-    xobs, yobs, yobs_err \
-            = simulate_transit.read_pandexo_results(pardict, instrument, \
-                res=resol)
+    #xobs, yobs, yobs_err \
+    #        = simulate_transit.read_pandexo_results(pardict, instrument, \
+    #            res=resol)
     #xobs -= 0.5
+    if pardict['instrument'] == 'NIRSpec_Prism/':
+        ldendname = 'prism'
+    elif pardict['instrument'] == 'NIRCam/':
+        ldendname = 'nircam'
+    ldd = open(pardict['project_folder'] \
+            + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
+                        + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
+    xobs = pickle.load(ldd)[1][0]
+    ldd.close()
     flag = xobs < 6
     expchan = len(xobs[flag])
 

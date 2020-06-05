@@ -10,7 +10,7 @@ from pdb import set_trace
 plt.ioff()
 
 def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
-        operation, models, res=10):
+        operation, models, res=10, fittype='grid'):
 
     # Folders & files
     pardict = {}
@@ -110,7 +110,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, 'jwst', pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_F322W2_', \
-          models, resol=res)
+          models, resol=res, fittype=fittype)
     #except FileNotFoundError:
     #    pass
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
@@ -125,7 +125,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
 
 def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
-            models=['phoenix'], res=10):
+            models=['phoenix'], res=10, fittype='grid'):
     '''
     Run the simulations for several scenarios.
 
@@ -170,7 +170,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 pardict = go(mag, ip['rplanet'], ip['tstar'], \
                             ip['tstar'] + td , ip['tpenumbra'], \
                             ip['loggstar'], ip['rstar'], \
-                            ip['instrument'], opers, models, res=res)
+                            ip['instrument'], opers, models, res=res, \
+                            fittype=fittype)
 
     plot_res(ip, mags, tcontrast, models)
 

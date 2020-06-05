@@ -3,8 +3,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares, minimize
 from scipy.signal import medfilt
+from scipy.sparse import csr_matrix
 import get_uncertainties as getunc
 import simulate_transit
 import rebin
@@ -18,7 +19,8 @@ modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
 
 plt.ioff()
 
-def read_res(pardict, instrument, plotname, resfile, models, resol=10):
+def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
+            resol=10):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
@@ -29,13 +31,17 @@ def read_res(pardict, instrument, plotname, resfile, models, resol=10):
     #    + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
     #                    + 'K/' + 'LDcoeffs_prism.pic', 'rb')
     #ldd = pickle.load(ldfile)
-    xobs, yobs, yobs_err \
-            = simulate_transit.read_pandexo_results(pardict, instrument, \
-                res=resol)
-    #xobs -= 0.3
+    if pardict['instrument'] == 'NIRSpec_Prism/':
+        ldendname = 'prism'
+    elif pardict['instrument'] == 'NIRCam/':
+        ldendname = 'nircam'
+    ldd = open(pardict['project_folder'] \
+            + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
+                        + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
+    xobs = pickle.load(ldd)[1][0]
+    ldd.close()
     flag = xobs < 6
     expchan = len(xobs[flag])
-    #ldfile.close()
 
     wl, A, x0, sigma = [], [], [], []
     yerrup, yerrdown = [], []
@@ -92,7 +98,11 @@ def read_res(pardict, instrument, plotname, resfile, models, resol=10):
     sigma = np.array(sigma)[flag]
     yerrup = np.array(yerrup)[flag]
     yerrdown = np.array(yerrdown)[flag]
-
+    # Use max uncertainty between yerrup and yerrdown
+    yerrfit = []
+    for j in np.arange(len(yerrup)):
+        yerrfit.append(max([yerrup[j], yerrdown[j]]))
+    yerrfit = np.array(yerrfit)
     res = np.diff(wl)[0] #int(3./np.diff(wl)[0])
 
     #for i in np.arange(len(A)):
@@ -139,28 +149,45 @@ def read_res(pardict, instrument, plotname, resfile, models, resol=10):
         plt.title('$A$', fontsize=16)
         print('Fitting ' + stmod + ' models...')
         # Get spectra with starspot contamination and perform LM fit
-        for i, temp in enumerate(tspot_):
-            if temp == pardict['tstar']:
-                continue
-            ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, res=res)
-            ww/= 1e4
-            spec*= A.max()
-            specint = interp1d(ww, spec)
-            specA = specint(wl)
-            # Use max uncertainty between yerrup and yerrdown
-            yerrfit = []
-            for j in np.arange(len(yerrup)):
-                yerrfit.append(max([yerrup[j], yerrdown[j]]))
-            yerrfit = np.array(yerrfit)
-            boundsm = ([0.], [np.inf])
-            soln = least_squares(scalespec, [1.], \
-                        bounds=boundsm, args=(specA, A, yerrfit))
-            #scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
-            print(temp, 'K Spectrum scaling factor:', soln.x[0])#, '+/-', \
-            #                    scale_unc[0])
-            plt.plot(ww, soln.x[0]*spec, label=str(temp), alpha=.5)
+        if fittype == 'grid':
+            for i, temp in enumerate(tspot_):
+                if temp == pardict['tstar']:
+                    continue
+                ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, \
+                        res=res, isplot=True)
+                ww/= 1e4
+                spec*= A.max()
+                specint = interp1d(ww, spec)
+                specA = specint(wl)
+                boundsm = ([0.], [np.inf])
+                soln = least_squares(scalespec, [1.], \
+                            bounds=boundsm, args=(specA, A, yerrfit))
+                #scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
+                print(temp, 'K Spectrum scaling factor:', soln.x[0])#, '+/-', \
+                #                    scale_unc[0])
+                plt.plot(ww, soln.x[0]*spec, label=str(temp), alpha=.5)
+                #plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp), alpha=.5)
+                chi2red[i] = np.sum((A - soln.x[0]*specA)**2/yerrfit**2) \
+                                /(len(yerrfit) - 1)
+                dict_results[pm][stmod][temp - pardict['tstar']] = chi2red[i]
+        elif fittype == 'LM_pysynphot':
+            boundsm = ([3500., 0.], [4900., np.inf])
+            opt = {}
+            opt['isplot'] = False
+            soln = least_squares(stmodfit, [4000., 1.], \
+                        bounds=boundsm, args=(wl, A, yerrfit, pardict, \
+                        res, stmod), kwargs=opt)
+            #ftol = 1e-9
+            #soln = minimize(stmodfit, [4000., 1.], jac=False, method='L-BFGS-B', \
+            #            args=(wl, A, yerrfit, pardict, res, stmod, isplot=False), \
+            #            bounds=boundsm, ftol=ftol)
+            #uncsol = get_uncertainties.unc_minimization_lbfgsb(soln, ftol=ftol)
+            print('Spectrum fit:', soln.x)
+            solmodel = combine_spectra(pardict, [soln.x[0]], 0.05, stmod, \
+                        res=res, isplot=True)#*soln.x[1]
+            #plt.plot(ww, solmodel)
             #plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp), alpha=.5)
-            chi2red[i] = np.sum((A - soln.x[0]*specA)**2/yerrfit**2) \
+            chi2red[i] = np.sum((A - solmodel)**2/yerrfit**2) \
                             /(len(yerrfit) - 1)
             dict_results[pm][stmod][temp - pardict['tstar']] = chi2red[i]
         #plt.legend(frameon=False, loc='best', fontsize=16)
@@ -177,11 +204,27 @@ def read_res(pardict, instrument, plotname, resfile, models, resol=10):
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
         plt.close('all')
 
-        fresults = open(resfile + stmod + '.pic', 'wb')
+        if fittype == 'grid':
+            fresults = open(resfile + stmod + '_grid.pic', 'wb')
+        elif fittype == 'LM_pysynphot':
+            fresults = open(resfile + stmod + '_LMfit.pic', 'wb')
         pickle.dump(dict_results, fresults)
         fresults.close()
 
     return np.array(wl), np.array(A), np.array(x0), np.array(sigma)
+
+def stmodfit(x, wl, y, yerr, pardict, res, stmod, isplot=False):
+    '''
+    Include the starspot Teff in the fit.
+    '''
+    temp = x[0]
+    ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, res=res, \
+                isplot=isplot)
+    ww/= 1e4
+    #spec*= 1e3
+    specint = interp1d(ww, spec)
+    specA = specint(wl)
+    return (x[1]*specA - y)**2/yerr**2
 
 def scalespec(x, spec, y, yerr):
     '''
@@ -190,7 +233,7 @@ def scalespec(x, spec, y, yerr):
     return (x[0]*spec - y)**2/yerr**2
     #return (x[0]*spec + x[1] - y)**2/yerr**2
 
-def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
+def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
     '''
     Combines starspot and stellar spectrum.
     Fit with Kurucz instead of Phoenix models 2/10/19
@@ -263,21 +306,24 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100.):
         #plt.plot(wnew*1e-4, rebstar)
         #plt.plot(wnew*1e-4, rebnew)
         #plt.plot(wave/1e4, rise2)
-        plt.plot(wnew/1e4, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
-                       + str(i) + 'K')
+        if isplot:
+            plt.plot(wnew/1e4, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
+                        + str(i) + 'K')
         #plt.xlim(0.6, 5)
         #plt.ylim(0, 4)
         #plt.show()
         #set_trace()
         #return
-    #plt.legend(frameon=False, fontsize=14)
-    plt.title('Stellar spectrum: ' + str(pardict['tstar']) + ' K', fontsize=16)
-    #plt.plot([0.719, 0.719], [0.5, 9.5], 'k--')
-    plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
-    plt.ylabel('Flux rise [Relative values]', fontsize=16)
-    #plt.xlim(0.6, 5)
-    #plt.ylim(1500, 6500)
-    #plt.show()
+    if isplot:
+        #plt.legend(frameon=False, fontsize=14)
+        plt.title('Stellar spectrum: ' + str(pardict['tstar']) + ' K', \
+                    fontsize=16)
+        #plt.plot([0.719, 0.719], [0.5, 9.5], 'k--')
+        plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
+        plt.ylabel('Flux rise [Relative values]', fontsize=16)
+        #plt.xlim(0.6, 5)
+        #plt.ylim(1500, 6500)
+        #plt.show()
     flag = np.logical_or(np.isnan(wnew), np.isnan(rise))
 
     return wnew[~flag], rise[~flag]

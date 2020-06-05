@@ -194,19 +194,11 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         xobs, yobs, yobs_err = simultr[0], simultr[1], simultr[2]
 
     # Calculate LD coefficients
-    LDcoeffs = []
+    LDcoeffs = [[], []]
     if pardict['instrument'] == 'NIRSpec_Prism/':
-        thrfile = 'None'
         ldendname = 'prism'
     elif pardict['instrument'] == 'NIRCam/':
-        if xobs < 2.5:
-            thrfile \
-            = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F150W2.dat'
-            ldendname = 'nircam_blue'
-        else:
-            thrfile \
-            = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F322W2.dat'
-            ldendname = 'nircam_red'
+        ldendname = 'nircam'
 
     if (pardict['magstar'] == 4.5 or pardict['magstar'] == 10.5) \
         and not pathlib.Path(pardict['project_folder'] \
@@ -220,10 +212,21 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
             else:
                 wl_bin_low = xobs[i] - np.diff(xobs)[i - 1]/2.
                 wl_bin_up = xobs[i] + np.diff(xobs)[i - 1]/2.
+            if ldendname == 'prism':
+                thrfile = 'None'
+            elif ldendname == 'nircam' and xobs[i] < 2.4:
+                thrfile \
+                = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F150W2.dat'
+            elif ldendname == 'nircam' and xobs[i] >= 2.4:
+                thrfile \
+                = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F322W2.dat'
+
             ww_, LDcoeffs_ = ld_coeffs.fit_law(pardict['tstar'], \
                 pardict['loggstar'], 0.0, thrfile=thrfile, grid='phoenix', \
                 wlmin=wl_bin_low, wlmax=wl_bin_up, nchannels=1, plots=False)
-            LDcoeffs.append(LDcoeffs_)
+            LDcoeffs[0].append(LDcoeffs_)
+
+        LDcoeffs[1] = [xobs, yobs, yobs_err]
         ldout = open(pardict['project_folder'] \
             + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
                         + 'K/' + 'LDcoeffs_' + ldendname +  '.pic', 'wb')
@@ -233,7 +236,7 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
     ldd = open(pardict['project_folder'] \
             + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
                         + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
-    ldlist = pickle.load(ldd)
+    ldlist = pickle.load(ldd)[0]
     ldd.close()
     #flag = xobs < 3.
     #xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
