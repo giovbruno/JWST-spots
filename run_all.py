@@ -7,7 +7,7 @@ import pathlib
 import pickle
 import matplotlib.pyplot as plt
 from pdb import set_trace
-plt.ioff()
+#plt.ioff()
 
 def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
         operation, models, res=10, fittype='grid'):
@@ -109,7 +109,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     #try:
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, 'jwst', pardict['chains_folder'] \
-          + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_F322W2_', \
+          + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
           models, resol=res, fittype=fittype)
     #except FileNotFoundError:
     #    pass
@@ -173,11 +173,12 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                             ip['instrument'], opers, models, res=res, \
                             fittype=fittype)
 
-    plot_res(ip, mags, tcontrast, models)
+    #map_uncertainties(mags, tcontrast, ip)
+    plot_res(ip, mags, tcontrast, models, fittype)
 
     return
 
-def plot_res(inputpars, mags, tcontrast, models):
+def plot_res(inputpars, mags, tcontrast, models, fittype):
     '''
     Build a 2d plot containing stellar mag, t diff input as axes and
     tdiff_output as color.
@@ -203,15 +204,17 @@ def plot_res(inputpars, mags, tcontrast, models):
                     + '_spot' + str(int(ip['tstar'] + td)) + '_' \
                     + str(int(ip['tpenumbra'])) + '_mag' + str(mag) + '/MCMC/'
                 try:
-                    resfile = open(chains_folder + 'contrast_res_F322W2_' \
-                                                        + mod + '.pic', 'rb')
+                    resfile = open(chains_folder + 'contrast_res_' + models[0] \
+                            + '_' + fittype + '.pic', 'rb')
                     resdict = pickle.load(resfile)
                     resfile.close()
                     tbest = sorted(zip(resdict[mag][mod].items()), \
                                     key=lambda x: x[0][1])[0][0][0]
                     #tdiff_output[i, j] = -(td - tbest)/(ip['tstar'] + td)*100
                     #tdiff_output_abs[i, j] = abs(td - tbest)/(ip['tstar'] + td)*100
-                    tdiff_output[i, j] = -(td - tbest)
+                    #tdiff_output[i, j] = -(td - tbest)
+                    tdiff_output[i, j] = resdict[mag]['Tunc']
+                    print(resdict[mag]['Tunc'])
                 except FileNotFoundError:
                     tdiff_output[i, j] = -999
         plt.figure()
@@ -226,5 +229,32 @@ def plot_res(inputpars, mags, tcontrast, models):
         plt.show()
         plt.savefig(project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/accuracy_' + mod + '.pdf')
+
+    return
+
+def map_uncertainties(mags, tcontrast, ip):
+
+    unc = []
+    for mag in mags:
+        homedir = os.path.expanduser('~')
+        project_folder = homedir + '/Dropbox/Projects/jwst_spots/'
+        instrument = ip['instrument'] + '/'
+        data_folder = project_folder + instrument + 'star_' \
+            + str(int(ip['tstar'])) + 'K/p' \
+            + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
+            + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
+            + '_spot' + str(int(ip['tstar'] + tcontrast[0])) + '_' \
+            + str(int(ip['tpenumbra'])) + '_mag' + str(mag) \
+            + '/simulated_data/'
+        specmodel = pickle.load(open(data_folder \
+                                        + 'spec_model_jwst.pic', 'rb'))
+        unc.append(np.median(specmodel[2])*1e6)
+
+    plt.plot(mags, unc, 'o-')
+    plt.xlabel('K mag', fontsize=14)
+    plt.ylabel('Median $D$ uncertainty [ppm]', fontsize=14)
+    plt.show()
+    plt.savefig(project_folder + instrument + 'star_' \
+            + str(int(ip['tstar'])) + 'K/map_uncertainties.pdf')
 
     return

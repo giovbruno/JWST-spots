@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.optimize import least_squares, minimize
 from scipy.signal import medfilt
+from scipy.integrate import trapz
 from scipy.sparse import csr_matrix
+from scipy import stats
 import get_uncertainties as getunc
 import simulate_transit
 import rebin
@@ -14,6 +16,10 @@ import glob
 import pickle
 from pdb import set_trace
 from astropy.io import fits
+import cornerplot
+import emcee
+from pysynphot import observation
+from pysynphot import spectrum
 
 modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
 
@@ -40,7 +46,10 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
                         + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
     xobs = pickle.load(ldd)[1][0]
     ldd.close()
+    #xobs -= 0.5
     flag = xobs < 6
+    #flag = np.logical_or.reduce((xobs < 1.6, np.logical_and(2.0 < xobs, \
+    #            xobs < 3.0), xobs > 4.0))
     expchan = len(xobs[flag])
 
     wl, A, x0, sigma = [], [], [], []
@@ -67,21 +76,23 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         #sigma.append(perc[-1])
         #A.append(perc[0]*1e6)
         #sigma.append(perc[1])
-        A.append(res['sol'].x[-2]*1e6)
+        A.append(res['sol'].x[-2])
         sigma.append(res['sol'].x[-1])
-        yerrup.append(res['1sigma_unc'][-2]*1e6)
-        yerrdown.append(res['1sigma_unc'][-2]*1e6)
+        yerrup.append(res['1sigma_unc'][-2])
+        yerrdown.append(res['1sigma_unc'][-2])
         ffopen.close()
         kr.append(res['sol'].x[0])
         krunc.append(res['1sigma_unc'][0])
 
     # Compare with initial simulation
-    plt.figure(42)
-    kr = np.array(kr)
-    krunc = np.array(krunc)
+    #plt.figure(42)
+    #kr = np.array(kr)
+    #krunc = np.array(krunc)
     #plt.errorbar(wl, kr**2, yerr=2.*kr*krunc, fmt='o', label='fit')
-    #plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o', label='simulated')
+    ##plt.errorbar(xobs, yobs, yerr=yobs_err, fmt='o', label='simulated')
     #plt.legend()
+    #plt.show()
+    #set_trace()
     #plt.savefig(pardict['chains_folder'] + 'compare_kr.pdf')
     #plt.close('all')
     # Group stuff together
@@ -90,14 +101,35 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     #sigma = np.vstack(sigma)
     wl = np.array(wl)
     if pardict['instrument'] == 'NIRCam/':
-        flag = wl < 4.
-    elif pardict['instrument'] == 'NIRSpec_Prism/':
         flag = wl < 6.
+        #flag = np.logical_or.reduce((wl < 1.6, np.logical_and(2.0 < wl, \
+        #            wl < 3.0), wl > 4.0))
+    elif pardict['instrument'] == 'NIRSpec_Prism/':
+        #flag = np.logical_or.reduce((wl < 1.6, np.logical_and(2.0 < wl, \
+        #           wl < 3.0), wl > 4.2))
+        #flag = np.logical_or(wl < 3.2, wl > 4.2)
+        flag = wl < 6.
+    flag[1] = False
     wl = wl[flag]
     A = np.array(A)[flag]
     sigma = np.array(sigma)[flag]
     yerrup = np.array(yerrup)[flag]
     yerrdown = np.array(yerrdown)[flag]
+    if pardict['instrument'] == 'NIRSpec_Prism/':
+        wref = np.logical_and(0.6 < wl, wl < 1.0)
+    elif pardict['instrument'] == 'NIRCam/':
+        wref = np.logical_and(1.0 < wl, wl < 1.8)
+    Aref = np.mean(A[wref])
+    sigma /= Aref
+    yerrup /= Aref
+    yerrdown /= Aref
+    A /= Aref
+    #plt.scatter(wl, A)
+    #plt.show()
+    #set_trace()
+    ##yerrup /= A.min()
+    #yerrdown /= A.min()
+    #A /= A.min()
     # Use max uncertainty between yerrup and yerrdown
     yerrfit = []
     for j in np.arange(len(yerrup)):
@@ -131,7 +163,6 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     plt.errorbar(ind, sigma[:, 2], yerr=sigma[:, 3] - sigma[:, 2], fmt = 'ko')
     plt.title('$\sigma$', fontsize=16)
     '''
-
     dict_results = {}
     # Try with different stellar models and find best Tspot fit
     for stmod in models:
@@ -139,11 +170,11 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         dict_results[pm] = {}
         dict_results[pm][stmod] = {}
         if pardict['tstar'] == 3500:
-            tspot_ = np.arange(2300, 3400, 100)
+            tspot_ = np.arange(2300, 3500, 50)
         else:
-            tspot_ = np.arange(3500, 4900, 100)
+            tspot_ = np.arange(3300, 4900, 50)
         tspot_ = tspot_[tspot_ != pardict['tstar']]
-        chi2red = np.zeros(len(tspot_)) + np.inf
+        likelihood = np.zeros(len(tspot_)) + np.inf
         plt.figure()
         plt.errorbar(wl, A, yerr=[yerrup, yerrdown], fmt='ko', mfc='None')
         plt.title('$A$', fontsize=16)
@@ -154,73 +185,179 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
                 if temp == pardict['tstar']:
                     continue
                 ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, \
-                        res=res, isplot=True)
-                ww/= 1e4
-                spec*= A.max()
+                        wl, res=res, isplot=False)
+                #ww/= 1e4
+                #spec*= A.max()
                 specint = interp1d(ww, spec)
                 specA = specint(wl)
-                boundsm = ([0.], [np.inf])
-                soln = least_squares(scalespec, [1.], \
+                #boundsm = ([1e-3, -10000], [np.inf, 10000])
+                boundsm = ([-10, 10])
+                soln = least_squares(scalespec, [0.], \
                             bounds=boundsm, args=(specA, A, yerrfit))
                 #scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
                 print(temp, 'K Spectrum scaling factor:', soln.x[0])#, '+/-', \
                 #                    scale_unc[0])
-                plt.plot(ww, soln.x[0]*spec, label=str(temp), alpha=.5)
-                #plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp), alpha=.5)
-                chi2red[i] = np.sum((A - soln.x[0]*specA)**2/yerrfit**2) \
-                                /(len(yerrfit) - 1)
-                dict_results[pm][stmod][temp - pardict['tstar']] = chi2red[i]
-        elif fittype == 'LM_pysynphot':
+                #plt.plot(ww, soln.x[0]*spec, label=str(temp), alpha=.5)
+                #if pardict['instrument'] == 'NIRCam/':
+                #    flag = np.logical_or.reduce((ww < 1.6, np.logical_and(2.0 < ww, \
+                #                    ww < 3.0), ww > 4.0))
+                #elif pardict['instrument'] == 'NIRSpec_Prism/':
+                #    flagf = np.logical_or(ww < 3.0, ww > 4.2)
+                #soln.x[0] = 1
+                plt.plot(ww, specA + soln.x[0], label=str(temp), alpha=.5)
+                chi2 = np.sum((A - specA - soln.x[0])**2 \
+                            /yerrfit**2)/(len(yerrfit) - 1)
+                likelihood[i] = np.exp(-0.5*chi2)
+                dict_results[pm][stmod][temp - pardict['tstar']] = likelihood[i]
+        elif fittype == 'mcmc':
             boundsm = ([3500., 0.], [4900., np.inf])
             opt = {}
-            opt['isplot'] = False
+            opt['isplot'] = Falsesoln.x
             soln = least_squares(stmodfit, [4000., 1.], \
                         bounds=boundsm, args=(wl, A, yerrfit, pardict, \
                         res, stmod), kwargs=opt)
             #ftol = 1e-9
             #soln = minimize(stmodfit, [4000., 1.], jac=False, method='L-BFGS-B', \
-            #            args=(wl, A, yerrfit, pardict, res, stmod, isplot=False), \
+            #            args=(wl, A, yerrfit, pardict, res, stmod, isplot=False, \
             #            bounds=boundsm, ftol=ftol)
             #uncsol = get_uncertainties.unc_minimization_lbfgsb(soln, ftol=ftol)
-            print('Spectrum fit:', soln.x)
-            solmodel = combine_spectra(pardict, [soln.x[0]], 0.05, stmod, \
-                        res=res, isplot=True)#*soln.x[1]
+            #print('Spectrum fit:', soln.x)
+            initial = np.array(soln.x)
+            ndim, nwalkers = len(initial), 10
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
+                    args=([wl, A, sigma, pardict, stmod, res]), threads=8, live_dangerously=False)
+
+            print("Running burn-in...")
+            p0 = initial + 100 * np.random.randn(nwalkers, ndim)
+            p0[:, 1] /= 100.
+            #p0 = np.zeros((10, 2))
+            #for i in np.arange(10):
+            #    p0[i, :] = [3700 + i*1, 1. + 0.1*i]
+            #set_trace()
+            sampler.run_mcmc(p0, 500)
+            samples = sampler.flatchain
+            lnL = sampler.flatlnprobability
+            titles = [r'$T_\mathrm{spot}$', 'c']
+            truths = [pardict['tumbra'], None]
+            cornerplot.cornerplot(samples, titles, truths, \
+                    pardict['chains_folder'] + '/corner.pdf')
+            #solmodel = combine_spectra(pardict, [soln.x[0]], 0.05, stmod, \
+            #            res=res, isplot=True)#*soln.x[1]
             #plt.plot(ww, solmodel)
             #plt.plot(ww, soln.x[0]*spec + soln.x[1], label=str(temp), alpha=.5)
+            best_sol = samples[lnL.argmax()]
             chi2red[i] = np.sum((A - solmodel)**2/yerrfit**2) \
                             /(len(yerrfit) - 1)
+            percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, \
+                        84.1, 95.45]) for i in np.arange(np.shape(samples)[1])]
+            # Save chains
+            fout = open(chains_folder_ch + 'chains.pic', 'wb')
+            chains_save = {}
+            chains_save['max ML']                   = soln.x
+            chains_save['chains']                   = samples
+            chains_save["Percentiles"]              = [percentiles]
+            chains_save["ln_L"]                     = lnL
+            pickle.dump(chains_save, fout)
+            fout.close()
+
             dict_results[pm][stmod][temp - pardict['tstar']] = chi2red[i]
+
         #plt.legend(frameon=False, loc='best', fontsize=16)
         plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
         plt.ylabel('Transit depth rise [ppm]', fontsize=16)
-        chi2min = np.argmin(chi2red)
-        print('chi2 min =', chi2red[chi2min], 'with Tspot =', \
-                                    tspot_[chi2min], 'K')
-        plt.title(stmod + r', $\min (\tilde{\chi}^2)=$' \
-           + str(np.round(chi2red[chi2min], 2)) \
-           + r', $T_\mathrm{spot}=$' + str(tspot_[chi2min]) + ' K', fontsize=16)
+        #chi2min = np.argmin(chi2)
+        maxL = np.argmax(likelihood)
+        #print('chi2 min =', chi2[chi2min], 'with Tspot =', \
+        #                            tspot_[chi2min], 'K')
+        print('L max =', likelihood[maxL], 'with Tspot =', \
+                                    tspot_[maxL], 'K')
+        plt.title(stmod \
+           #+ r', $\min (\tilde{\chi}^2)=$' \
+           #+ str(np.round(chi2red[chi2min], 2)) \
+           + r', $T_\mathrm{spot}=$' + str(tspot_[maxL]) + ' K', fontsize=16)
         plt.xlim(wl.min() - 0.2, wl.max() + 0.2)
-        plt.ylim(0., 6000)
+        #plt.ylim(0., 6000)
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
         plt.close('all')
 
-        if fittype == 'grid':
-            fresults = open(resfile + stmod + '_grid.pic', 'wb')
-        elif fittype == 'LM_pysynphot':
-            fresults = open(resfile + stmod + '_LMfit.pic', 'wb')
-        pickle.dump(dict_results, fresults)
-        fresults.close()
+    plt.figure()
+    x, y = [], []
+    for jj in dict_results[pardict['magstar']][models[0]].keys():
+        x.append(jj)
+        y.append(dict_results[pardict['magstar']][models[0]][jj])
+    x = np.array(x)
+    y = np.array(y)
+    A = np.sum(y)
+    #A = trapz(y, x)
+
+    prob = y/A
+    valmax = prob.max()
+    xmax = prob.argmax()
+
+    # Create PDF with the prob sampling
+    pdf = stats.rv_discrete(a=x.min(), b=x.max(), values=(x, prob))
+    Tmean = pdf.mean()
+    Tconf = [pdf.std(), pdf.std()]
+    #Tconf= pdf.interval(0.642) # % 64.2% confidence interval
+    dist = pardict['tumbra'] - pardict['tstar'] - pdf.median()
+    if dist > 0:
+        Tunc = abs(dist)/(Tconf[1] - pdf.mean())
+    else:
+        Tunc = abs(dist)/(pdf.mean() - Tconf[0])
+
+    # Fit a Gaussian centered here
+    #bbounds = ([0, x.min(), 50], [2*valmax, x.max(), 1000.])
+    #fitgauss = lambda p, t, u: (u - gauss(p, t))**2
+    #soln = least_squares(fitgauss, [valmax, x[prob.argmax()], 150.], \
+    #            args=(x, prob), bounds=bbounds)
+    #Tunc = soln.x[2]
+    dict_results[pardict['magstar']]['Tunc'] = [abs(Tunc), pdf.std()]
+    #ress = dict_results[10.5]['phoenix'].values()
+    #flag = ress < 2e-22
+    plt.plot(x, prob, 'ko-')# bins=15)
+    #xTh = np.linspace(x.min(), x.max(), 1000)
+    #plt.plot(xTh, gauss(soln.x, xTh), 'cyan')
+    plt.plot([-pardict['tstar'] + pardict['tumbra'], \
+            -pardict['tstar'] + pardict['tumbra']], [prob.min(), \
+                    prob.max()], 'r--')
+    plt.xlabel(r'$\Delta T_\mathrm{spot}$ [K]', fontsize=16)
+    plt.ylabel('Probability likelihood', fontsize=16)
+    #plt.ylim(0, 10000)
+    plt.show()
+
+    plt.savefig(plotname + stmod + '_' + instrument + '_like.pdf')
+    if fittype == 'grid':
+        fresults = open(resfile + stmod + '_grid.pic', 'wb')
+    elif fittype == 'LM_pysynphot':
+        fresults = open(resfile + stmod + '_LMfit.pic', 'wb')
+    pickle.dump(dict_results, fresults)
+    fresults.close()
 
     return np.array(wl), np.array(A), np.array(x0), np.array(sigma)
+
+def gauss(par, x):
+    '''
+    Par is defined as [A, x0, sigma]
+    '''
+    A, x0, sigma = par
+    return A*np.exp(-0.5*(x - x0)**2/sigma**2)
+
+
+def lnprob(pars, x, y, yerr, pardict, stmod, res):
+
+    if np.logical_or(pars[0] < 2000, pars[0] >= pardict['tstar']):
+        return -np.inf
+    else:
+        return lnlike(pars, x, y, yerr, pardict, stmod, res)
 
 def stmodfit(x, wl, y, yerr, pardict, res, stmod, isplot=False):
     '''
     Include the starspot Teff in the fit.
     '''
     temp = x[0]
-    ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, res=res, \
+    ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, wl, res=res, \
                 isplot=isplot)
-    ww/= 1e4
+    #ww/= 1e4
     #spec*= 1e3
     specint = interp1d(ww, spec)
     specA = specint(wl)
@@ -230,10 +367,11 @@ def scalespec(x, spec, y, yerr):
     '''
     Distance between model spectrum and data.
     '''
-    return (x[0]*spec - y)**2/yerr**2
-    #return (x[0]*spec + x[1] - y)**2/yerr**2
+    #return (x[0]*spec - y)**2/yerr**2
+    return (spec + x[0] - y)**2/yerr**2
 
-def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
+def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
+                                                    res=100., isplot=False):
     '''
     Combines starspot and stellar spectrum.
     Fit with Kurucz instead of Phoenix models 2/10/19
@@ -241,6 +379,7 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
     Input
     -----
     tspot: list (of effective temperatures)
+    wl: array to degrade the model spectrum
     '''
 
     # This is in Angstroms
@@ -249,6 +388,7 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
                 pardict['loggstar']).wave
         star = pysynphot.Icat(stmodel, pardict['tstar'], 0.0, \
                 pardict['loggstar']).flux
+    #wnew = wave.copy()*1e-4
     #elif stmodel == 'phoenix':
     #    wave = fits.open(modelsfolder \
     #                +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
@@ -263,10 +403,15 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
     #    kern = int(res*1e4/2.)
     #else:
     #    kern = int(res*1e4/2.) - 1
-    kern = 5
-    wnew = wave[::kern]
-    rebstar = medfilt(star, kernel_size=kern)[::kern]
-    rebstar[rebstar < 1e-6] = 0.
+    #kern = 5
+    #kern = int(len(wave)/len(kr))
+    #if kern % 2 == 0:
+    #    kern += 1
+    #wnew = wave[::kern]
+    #rebstar = medfilt(star, kernel_size=kern)[::kern]
+    #rebstar[rebstar < 1e-6] = 0.
+    rebstar = degrade_spec(star, wave, wnew)
+
     # Increase errors (based on ETC?)
     #errstar += rebstar*abs(np.random.normal(loc=0., scale=5.5e-3, \
     #                        size=len(errstar)))
@@ -274,15 +419,17 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
 
     for i in tspot:
         if stmodel == 'ck04models' or stmodel == 'phoenix':
-            spot = pysynphot.Icat(stmodel, i, 0.0, pardict['loggstar'] - 0.5).flux
+            spot = pysynphot.Icat(stmodel, i, 0.0, \
+                                            pardict['loggstar'] - 0.5).flux
         #elif stmodel == 'phoenix':
         #    spot = fits.open(modelsfolder + 'lte0' + str(i) \
         #            + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
         #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
         specnew = spot#(1 - ffact)*star + ffact*spot
         #rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
-        rebnew = medfilt(specnew, kernel_size=kern)[::kern]
-        rebnew[rebnew < 1e-6] = 0.
+        #rebnew = medfilt(specnew, kernel_size=kern)[::kern]
+        #rebnew[rebnew < 1e-6] = 0.
+        rebnew = degrade_spec(specnew, wave, wnew)
         #plt.plot(spot)
         #plt.plot(star)
         #plt.plot(rebnew/rebstar)
@@ -293,7 +440,10 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
         # Compare plots
         #plt.errorbar(wnew/10., rebnew, yerr=errnew, label=str(i))
         # As Sing+2011
-        wref = np.logical_and(6000 < wnew, wnew < 7000)
+        if pardict['instrument'] == 'NIRSpec_Prism/':
+            wref = np.logical_and(0.6 < wnew, wnew < 1.0)
+        elif pardict['instrument'] == 'NIRCam/':
+            wref = np.logical_and(1.0 < wnew, wnew < 1.8)
         #wref = np.logical_and(24000 < wnew, wnew < 25000)
         spotref = rebnew[wref]
         starref = rebstar[wref]
@@ -306,11 +456,13 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
         #plt.plot(wnew*1e-4, rebstar)
         #plt.plot(wnew*1e-4, rebnew)
         #plt.plot(wave/1e4, rise2)
+
         if isplot:
-            plt.plot(wnew/1e4, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
+            #plt.plot(wnew/1e4, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
+            #            + str(i) + 'K')
+            plt.plot(wnew, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
                         + str(i) + 'K')
-        #plt.xlim(0.6, 5)
-        #plt.ylim(0, 4)
+        #plt.ylim(0, 5.)
         #plt.show()
         #set_trace()
         #return
@@ -327,6 +479,26 @@ def combine_spectra(pardict, tspot, ffact, stmodel, res=100., isplot=False):
     flag = np.logical_or(np.isnan(wnew), np.isnan(rise))
 
     return wnew[~flag], rise[~flag]
+
+def degrade_spec(spec, oldwl, newwl):
+    '''
+    Use provided new wavelength to degrade spectrum.
+    '''
+
+    newspec = np.zeros(len(newwl))
+    dwl = np.diff(newwl)
+    for j, wli in enumerate(newwl):
+        #if j == 0:
+        #    wl1, wl2 = wli - dwl[0], wli + dwl[0]
+        if j == len(newwl) - 1:
+            wl1, wl2 = wli - 0.5*dwl[-1], wli + 0.5*dwl[-1]
+        else:
+            wl1, wl2 = wli - 0.5*dwl[j], wli + 0.5*dwl[j]
+        flag = np.logical_and(oldwl/1e4 >= wl1, oldwl/1e4 < wl2)
+        #flag = np.logical_and(oldwl >= wl1, oldwl < wl2)
+        newspec[j] = np.mean(spec[flag])
+
+    return newspec
 
 def plot_precision(pardict, xaxis, deltapar):
     '''
@@ -468,3 +640,65 @@ def compare_pysynphot_phoenix():
     plt.plot(np.diff(wpy))
     plt.show()
     return
+
+def compare_contrast_spectra(tstar, loggstar, tspot):
+
+    starmod = pysynphot.Icat('phoenix', tstar, 0.0, loggstar)
+    starflux = starmod.flux
+    wl = starmod.wave#/1e4
+    #wl = fits.open(modelsfolder \
+    #                +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data/1e4
+    #starflux = fits.open(modelsfolder + 'lte0' + str(tstar) \
+    #            + '-' + '{:3.2f}'.format(loggstar) \
+    #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+    wnew = np.linspace(0.6, 5.3, 35)
+    starflux = degrade_spec(starflux, wl, wnew)
+    #wl = wl[::100]
+    #starflux = starflux[::100]
+    for ti in tspot:
+        spotflux = pysynphot.Icat('phoenix', ti, 0.0, loggstar - 0.5).flux
+        #spotflux = spotmod.flux
+        #spotflux = fits.open(modelsfolder + 'lte0' + str(ti) \
+        #    + '-' + '{:3.2f}'.format(loggstar - 0.5) \
+        #    + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+        #spotflux = spotflux[::100]
+        spotflux = degrade_spec(spotflux, wl, wnew)
+        #wref = np.logical_and(7.5 < wl/1e4, wl/1e4 < 9.0)
+        wref = np.logical_and(0.6 < wnew, wnew < 1.0)
+        spotref = spotflux[wref]
+        starref = starflux[wref]
+        fref = 1. - np.mean(spotref/starref)
+        rise = (1. - spotflux/starflux)/fref
+        plt.plot(wnew, rise, label=str(ti))
+    plt.xlim(0.6, 6)
+    plt.ylim(0, 2)
+    plt.legend()
+    plt.show()
+
+    return
+
+def lnlike(pars, x, y, yerr, pardict, stmod, res):
+
+    model = combine_spectra(pardict, [pars[0]], 0.05, stmod, x, \
+                res=res, isplot=False)
+    sigma = np.mean(yerr)
+    lnL = -0.5*len(y)*np.log(sigma) - 0.5*len(y)*np.log(2.*np.pi) \
+                - 0.5*chi2(model, y, yerr)
+    #print(lnL)
+    #plt.plot(t, model)
+    #plt.errorbar(t, y, yerr=yerr, fmt='o')
+    #plt.show()
+    #set_trace()
+    return lnL
+
+def chi2(model, y, yerr):
+    return np.sum((model - y)**2/yerr**2)
+
+def prior(cube, ndim, nparams):
+    for i in range(ndim):
+        cube[i] = cube[i]*1500. + 3500.
+
+def loglike(cube, ndim, nparams):
+    model = combine_spectra(pardict, [cube[0]], 0.05, stmod, wl, \
+                res=res, isplot=False)
+    loglikelihood=-0.5*np.sum((y_meas-y_binned)**2/err**2)

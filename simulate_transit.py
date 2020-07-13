@@ -176,7 +176,6 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         flag = xobs < 6.5
         xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
         #yobs_err /= 2.
-
         # Rebin from resolution 100 to res
         #xobs = rebin.rebin_wave(xobs_, 70)
         #yobs, yobs_err = rebin.rebin_spectrum(yobs_, xobs_, xobs, unc=yobs_err_)
@@ -192,6 +191,12 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
     elif len(simultr) == 3:
         # First and last one must have some rebinning problem
         xobs, yobs, yobs_err = simultr[0], simultr[1], simultr[2]
+
+    # Save transmission spectrum
+    savespec = open(pardict['data_folder'] + 'spec_model_' + instrument \
+                    + '.pic', 'wb')
+    pickle.dump([xobs, yobs, yobs_err], savespec)
+    savespec.close()
 
     # Calculate LD coefficients
     LDcoeffs = [[], []]
@@ -272,7 +277,7 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
     #    print('# LD coefficients != # transmission spectrum points. Wrong LD file?')
         #set_trace()
     # Here, the last element of arange is the white light curve
-
+    rise = []
     for i in np.arange(len(xobs)):
         # Compute transit with two spots
         fix_dict = {}
@@ -361,13 +366,15 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
             chanleft = xobs[i] ##wl.min()*1e-4
         else:
             chanleft = (xobs[i] - 0.5*(xobs[i] - xobs[i - 1])) #* u.micrometer
-        if i == len(xobs) -1:
+        if i == len(xobs) - 1:
             chanright = xobs[i]#*1e4
         else:
             chanright = (xobs[i] + 0.5*(xobs[i + 1] - xobs[i])) #* u.micrometer
         wlcenter = np.mean([chanleft, chanright]) #* u.micrometer
         wlbin = np.logical_and(wl*1e-4 >= chanleft, wl*1e-4 <= chanright)
+
         params[6] = 1. - np.mean(contrast[wlbin]) # Contrast spot 1
+        rise.append(params[6])
         # Some numberical problems in the models?
         #if params[6] < 0.:
         #    set_trace()
@@ -416,7 +423,10 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         savefile.close()
 
     # Remove pandexo plot files
-    os.system('rm *html')
+    #os.system('rm *html')
+    #plt.figure()
+    #plt.plot(xobs, np.array(rise)/min(rise), 'o')
+    #plt.show()
 
     return len(xobs) #i#tt, transit
 

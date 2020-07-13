@@ -186,6 +186,7 @@ def transit_emcee(diz, ind):
     kr, t0, q1, q2, r0, r1 = 0.09, 0.1, 0.3, 0.3, -1e-3, 1.#, 1.
 
     A, sigma, x0 = 1e-3, 0.01, 0.105
+
     #initial_params = kr, t0, aR, i, q1, q2, r0, r1, r2, C, A, x0, sigma
     #initial_params = kr, t0, q1, q2, r0, r1, r2, C, A, x0, sigma
     initial_params = kr, t0, q1, q2, r0, r1, A, sigma, x0
@@ -203,7 +204,7 @@ def transit_emcee(diz, ind):
     options['ftol'] = ftol
     options['eps'] = 1e-9
     nll = lambda *args: -lnlike_white(*args)
-    if wl <= 2.5:
+    if wl <= 2.55:
         soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
                     args=(t, y, yerr), bounds=bounds_model, options=options)
     else:
@@ -1009,7 +1010,7 @@ def transit_syst_spot(par, t):
         r0 = par[4]
         r1 = par[5]
         Aspot = par[6]
-        sigmaSpot = par[7]
+        sigmaSpot = 2970./1e6#par[7]
         x0 = par[8]
         #c = par[7]
         model = (transit_white([kr, t0, q1, q2], t) \

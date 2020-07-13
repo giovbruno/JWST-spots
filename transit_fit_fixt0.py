@@ -76,8 +76,15 @@ def transit_spectro(pardict, instrument, resol=10):
                         + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
     xobs = pickle.load(ldd)[1][0]
     ldd.close()
+    #xobs -= 0.5
     flag = xobs < 6
     expchan = len(xobs[flag])
+
+    global spotwidth
+    if pardict['tstar'] == 5000:
+        spotwidth = 2970./1e6#par[4]
+    elif pardict['tstar'] == 3500:
+        spotwidth = 0.0017
 
     #ldfile.close()
     # Save results
@@ -222,7 +229,7 @@ def transit_emcee(diz, ind):
     ftol = 1e-10
     options['ftol'] = ftol
     nll = lambda *args: -lnlike_white(*args)
-    if wl <= 2.5:
+    if wl <= 2.7:
         soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
                     args=(t, y, yerr), bounds=bounds_model, options=options)
     else:
@@ -1007,7 +1014,7 @@ def transit_syst(par, t):
 
 def transit_syst_spot(par, t):
 
-    if wl <= 2.5:
+    if wl <= 2.7:
         #params = par.valuesdict()
         #kr = params['kr']
         #q1 = params['q1']
@@ -1022,8 +1029,9 @@ def transit_syst_spot(par, t):
         r0 = par[3]
         r1 = par[4]
         Aspot = par[5]
-        sigmaSpot = par[6]
+        #sigmaSpot = par[6]
         #c = par[7]
+        sigmaSpot = spotwidth
         model = (transit_white([kr, q1, q2], t) \
                     + gauss(t, [Aspot, sigmaSpot]))*np.polyval([r0, r1], t)
     else:
@@ -1031,7 +1039,7 @@ def transit_syst_spot(par, t):
         r0 = par[1]
         r1 = par[2]
         Aspot = par[3]
-        sigmaSpot = par[4]
+        sigmaSpot = spotwidth
         model = (transit_white_noLD([kr], t) \
                     + gauss(t, [Aspot, sigmaSpot]))*np.polyval([r0, r1], t)
 
