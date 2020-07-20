@@ -31,7 +31,7 @@ thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
 plt.ioff()
 
 def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
-            resol=10):
+            resol=10, mcmc=False):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
@@ -61,34 +61,46 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     yerrup, yerrdown = [], []
     kr, krunc = [], []
     for i in np.arange(expchan):
-        #ffopen = open(pardict['chains_folder'] + 'chains_' \
-        #            + str(i) + '.pickle', 'rb')
-        ffopen = open(pardict['chains_folder'] + 'sol_LM_' + str(i) \
+        if mcmc:
+            ffopen = open(pardict['chains_folder'] + 'chains_' \
+                    + str(i) + '.pickle', 'rb')
+            res = pickle.load(ffopen)
+            perc = res['Percentiles'][0][-2]
+            wl.append(res['wl'])
+            A.append(perc[2])
+            yerrup.append(perc[3] - perc[2])
+            yerrdown.append(perc[2] - perc[1])
+        else:
+            ffopen = open(pardict['chains_folder'] + 'sol_LM_' + str(i) \
                         + '.pic', 'rb')
-        res = pickle.load(ffopen)
-        #Achain = res['Chains'][:, -2]
-        #Achain = Achain[Achain > 0.]
-        #sigmachain = res['Chains'][:, -1]
-        #sigmachain = sigmachain[sigmachain > 0.]
-        #sigmachain = res['Starspot_size']
-        # Recompute percentiles, excluding negative results for A
-        #perc = [np.percentile(i,[4.55, 15.9, 50, 84.1, 95.45]) \
-        #                    for i in [Achain, sigmachain]]
-        #perc = res['Percentiles'][0]
-        wl.append(res['wl'])
-        #A.append(perc[-3]*1e6)
-        #x0.append(perc[-2]*1e6)
-        #sigma.append(perc[-1])
-        #A.append(perc[0]*1e6)
-        #sigma.append(perc[1])
-        A.append(res['sol'].x[-2])
-        sigma.append(res['sol'].x[-1])
-        yerrup.append(res['1sigma_unc'][-2])
-        yerrdown.append(res['1sigma_unc'][-2])
-        ffopen.close()
-        kr.append(res['sol'].x[0])
-        krunc.append(res['1sigma_unc'][0])
+            res = pickle.load(ffopen)
+            #Achain = res['Chains'][:, -2]
+            #Achain = Achain[Achain > 0.]
+            #sigmachain = res['Chains'][:, -1]
+            #sigmachain = sigmachain[sigmachain > 0.]
+            #sigmachain = res['Starspot_size']
+            # Recompute percentiles, excluding negative results for A
+            #perc = [np.percentile(i,[4.55, 15.9, 50, 84.1, 95.45]) \
+            #                    for i in Achain]#, sigmachain]]
 
+            #x0.append(perc[-2]*1e6)
+            #sigma.append(perc[-1])
+            #A.append(perc[0]*1e6)
+            #sigma.append(perc[1])
+
+            # This is for the LM fit
+            A.append(res['sol'].x[-2])
+            sigma.append(res['sol'].x[-1])
+            yerrup.append(res['1sigma_unc'][-2])
+            yerrdown.append(res['1sigma_unc'][-2])
+            kr.append(res['sol'].x[0])
+            krunc.append(res['1sigma_unc'][0])
+        ffopen.close()
+
+
+    #yerrup, yerrdown = np.array(yerrup), np.array(yerrdown)
+    #yerrup[yerrup < 20e-6] = 20e-6
+    #yerrdown[yerrdown < 20e-6] = 20e-6
     # Compare with initial simulation
     #plt.figure(42)
     #kr = np.array(kr)
@@ -117,7 +129,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     flag[1] = False
     wl = wl[flag]
     A = np.array(A)[flag]
-    sigma = np.array(sigma)[flag]
+    #sigma = np.array(sigma)[flag]
     yerrup = np.array(yerrup)[flag]
     yerrdown = np.array(yerrdown)[flag]
     if pardict['instrument'] == 'NIRSpec_Prism/':
@@ -125,7 +137,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     elif pardict['instrument'] == 'NIRCam/':
         wref = np.logical_and(1.0 < wl, wl < 1.8)
     Aref = np.mean(A[wref])
-    sigma /= Aref
+    #sigma /= Aref
     yerrup /= Aref
     yerrdown /= Aref
     A /= Aref
@@ -178,7 +190,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
             tspot_ = np.arange(2300, pardict['tstar'] - 200, 25)
             #tspot_ = np.array([2700, 3100])
         else:
-            tspot_ = np.arange(3300, pardict['tstar'] - 200, 50)
+            tspot_ = np.arange(3300, pardict['tstar'] - 200, 25)
             #tspot_ = np.array([3500, 3900])#, 4100])
         tspot_ = tspot_[tspot_ != pardict['tstar']]
         likelihood = np.zeros(len(tspot_)) + np.inf
@@ -209,6 +221,9 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
                 #scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
                 print(temp, 'K Spectrum scaling factor:', soln.x[0])#, '+/-', \
                 #                    scale_unc[0])
+                # Rescale uncertainties
+                #chi2t = np.sum((specA + soln.x[0] - A)**2/yerrfit**2)
+                #yerrfit *= (chi2t/len(yerrfit - 1.))**0.5
                 #plt.plot(ww, soln.x[0]*spec, label=str(temp), alpha=.5)
                 #if pardict['instrument'] == 'NIRCam/':
                 #    flag = np.logical_or.reduce((ww < 1.6, np.logical_and(2.0 < ww, \
@@ -220,10 +235,11 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
                 #plt.plot(wl, A - specA - soln.x[0], label=str(temp), alpha=.5)
                 #plt.ylim(0, 2)
                 chi2 = np.sum((A - specA - soln.x[0])**2 \
-                            /(yerrfit**2))/(len(yerrfit) - 2)
+                            /(yerrfit**2))#/(len(yerrfit) - 2)
                 chi2r[i] = chi2
                 likelihood[i] = np.exp(-0.5*chi2)
-                #likelihood[i] = stats.chi2()
+                #chi2prob = stats.chi2(df=len(yerrfit) - 1)
+                #likelihood[i] = chi2prob.pdf(chi2)
                 dict_results[pm][stmod][temp - pardict['tstar']] = likelihood[i]
         elif fittype == 'mcmc':
             boundsm = ([3500., 0.], [4900., np.inf])
@@ -304,15 +320,14 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     x = np.array(x)
     y = np.array(y)
     C = np.sum(y)
-    A = trapz(y, x)
     prob = y/C
-    cc = stats.chi2(df=len(yerrfit) - 1)
-    plt.figure()
-    plt.plot(chi2r, cc.pdf(chi2r))
-    plt.figure()
-    plt.plot(x, cc.pdf(chi2r))
-    plt.show()
-    set_trace()
+    #plt.figure()
+    #plt.plot(x, prob)
+    #plt.show()
+    #set_trace()
+    #A = trapz(y, x)
+    prob = y/C
+
     valmax = prob.max()
     xmax = prob.argmax()
 
@@ -325,10 +340,10 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     #Tunc = dist
     #if (Tconf == pdf.median()).any():
     #    set_trace()
-    if dist > 0:
-        Tsigma = abs(dist)/(Tconf[1] - pdf.median())
-    else:
-        Tsigma = abs(dist)/(pdf.median() - Tconf[0])
+    #if dist > 0:
+    #    Tsigma = abs(dist)/(Tconf[1] - pdf.median())
+    #else:
+    #    Tsigma = abs(dist)/(pdf.median() - Tconf[0])
     Tsigma = pdf.std()
     # Fit a Gaussian centered here
     #bbounds = ([0, x.min(), 50], [2*valmax, x.max(), 1000.])

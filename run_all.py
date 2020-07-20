@@ -10,7 +10,7 @@ from pdb import set_trace
 #plt.ioff()
 
 def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
-        operation, models, res=10, fittype='grid'):
+        operation, models, res=10, fittype='grid', mcmc=False):
 
     # Folders & files
     pardict = {}
@@ -104,13 +104,13 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
 
     # Select channels and fit transit + spots
     if 'fit_transits' in operation:
-        transit_fit.transit_spectro(pardict, 'jwst', resol=res)
+        transit_fit.transit_spectro(pardict, 'jwst', resol=res, mcmc=mcmc)
     # Fit derived transit depth rise with stellar models
     #try:
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, 'jwst', pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, fittype=fittype)
+          models, resol=res, fittype=fittype, mcmc=mcmc)
     #except FileNotFoundError:
     #    pass
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
@@ -125,7 +125,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
 
 def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
-            models=['phoenix'], res=10, fittype='grid'):
+            models=['phoenix'], res=10, fittype='grid', mcmc=False):
     '''
     Run the simulations for several scenarios.
 
@@ -171,7 +171,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                             ip['tstar'] + td , ip['tpenumbra'], \
                             ip['loggstar'], ip['rstar'], \
                             ip['instrument'], opers, models, res=res, \
-                            fittype=fittype)
+                            fittype=fittype, mcmc=mcmc)
 
     #map_uncertainties(mags, tcontrast, ip)
     plot_res(ip, mags, tcontrast, models, fittype)

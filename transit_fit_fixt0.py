@@ -33,7 +33,7 @@ ierrw = np.array([1e-1, 1e-1, 5.0, 1.0, 0.5, 0.5, 1., 1., 1., 0.05, 1e-1, \
 ierrs = np.array([1e-3, 0.1, 0.1, 1., 0.05])
 
 # For all spectral bands
-def transit_spectro(pardict, instrument, resol=10):
+def transit_spectro(pardict, instrument, resol=10, mcmc=False):
     '''
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
@@ -91,7 +91,7 @@ def transit_spectro(pardict, instrument, resol=10):
     diz_res = {}
     for i in np.arange(expchan):
         #try:
-        samples_blue, spot1 = transit_emcee(pardict, int(i))
+        samples_blue, spot1 = transit_emcee(pardict, int(i), mcmc=mcmc)
         diz_res[i] = spot1
         #except ValueError:
         #    pass
@@ -102,7 +102,7 @@ def transit_spectro(pardict, instrument, resol=10):
 
     return
 
-def transit_emcee(diz, ind):
+def transit_emcee(diz, ind, mcmc):
 
     print('Channel', str(ind))
 
@@ -263,121 +263,137 @@ def transit_emcee(diz, ind):
     #x = np.linspace(t.min(), t.max(), 1000)
     #plt.plot(x, transit_white(soln.x, x))
     #plt.show()
-    '''
+
     # Now, MCMC starting almost from the optimized solution
-    initial = np.array(soln.x)
-    ndim, nwalkers = len(initial), 60
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob_white, \
-            args=([t, y, yerr]), threads=8, live_dangerously=False)
+    if mcmc:
+        initial = np.array(soln.x)
+        ndim, nwalkers = len(initial), 60
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob_white, \
+                args=([t, y, yerr]), threads=8, live_dangerously=False)
 
-    print("Running burn-in...")
-    p0 = initial + 1e-3 * np.random.randn(nwalkers, ndim)
-    #p0 = initial \
-    #    + 1e-3*np.random.multivariate_normal(np.zeros(ndim), \
-    #      np.diag([0.1, 0.1, 0.1, 1., 1., 1., 0.1, 0.1, 0.1]), \
-    #      size=(nwalkers))
-    # Test that initial values are within priors
-    if np.sum(p0[:, 0] < 0) > 0:
-        p0[:, 0][p0[:, 0] < 0] = abs(p0[:, 0][p0[:, 0] < 0])
-    if np.sum(p0[:, 1] < 0) > 0:
-        p0[:, 1][p0[:, 1] < 0.] = abs(p0[:, 1][p0[:, 1] < 0.])
-    if np.sum(p0[:, 2] < 0) > 0:
-        p0[:, 3][p0[:, 2] < 0.] = abs(p0[:, 2][p0[:, 2] < 0.])
-    if np.sum(p0[:, -2] < 0) > 0:
-        p0[:, -2][p0[:, -2] <= 0] = abs(p0[:, -2][p0[:, -2] <= 0])
-    if np.sum(p0[:, -1] < 0) > 0:
-        p0[:, -1][p0[:, -1] <= 0] = abs(p0[:, -1][p0[:, -1] <= 0])
+        print("Running burn-in...")
+        p0 = initial + 1e-3 * np.random.randn(nwalkers, ndim)
+        #p0 = initial \
+        #    + 1e-3*np.random.multivariate_normal(np.zeros(ndim), \
+        #      np.diag([0.1, 0.1, 0.1, 1., 1., 1., 0.1, 0.1, 0.1]), \
+        #      size=(nwalkers))
+        # Test that initial values are within priors
+        if np.sum(p0[:, 0] < 0) > 0:
+            p0[:, 0][p0[:, 0] < 0] = abs(p0[:, 0][p0[:, 0] < 0])
+        if np.sum(p0[:, 1] < 0) > 0:
+            p0[:, 1][p0[:, 1] < 0.] = abs(p0[:, 1][p0[:, 1] < 0.])
+        if np.sum(p0[:, 2] < 0) > 0:
+            p0[:, 3][p0[:, 2] < 0.] = abs(p0[:, 2][p0[:, 2] < 0.])
+        if np.sum(p0[:, -2] < 0) > 0:
+            p0[:, -2][p0[:, -2] <= 0] = abs(p0[:, -2][p0[:, -2] <= 0])
+        if np.sum(p0[:, -1] < 0) > 0:
+            p0[:, -1][p0[:, -1] <= 0] = abs(p0[:, -1][p0[:, -1] <= 0])
 
-    nsteps = 1000
-    width = 30
+        nsteps = 100
+        width = 30
 
-    for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
-        n = int((width+1)*float(i)/nsteps)
-        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
-    sys.stdout.write("\n")
-    p0, lp, _ = result
-    sampler.reset()
+        for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
+            n = int((width+1)*float(i)/nsteps)
+            sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
+        sys.stdout.write("\n")
+        p0, lp, _ = result
+        sampler.reset()
 
-    # Now, restart the exploration
-    print("Running production...")
-    nsteps = 3000
-    width = 30
-    for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
-        n = int((width+1) * float(i) / nsteps)
-        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
-    sys.stdout.write("\n")
-    pfin, lpfin, _ = result
+        # Now, restart the exploration
+        print("Running production...")
+        nsteps = 300
+        width = 30
+        for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
+            n = int((width+1) * float(i) / nsteps)
+            sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
+        sys.stdout.write("\n")
+        pfin, lpfin, _ = result
 
-    #sampler.run_mcmc(p0, 300)
+        #sampler.run_mcmc(p0, 300)
 
-    # Merge in single chains
-    samples = sampler.flatchain
-    lnL = sampler.flatlnprobability
-    # There are -np.inf in the likelihood! Why?!?
-    #inl = len(lnL)
-    #isfin = np.isfinite(lnL)
-    #lnL = lnL[isfin]
-    #print('Removed inf values:', inl - len(lnL))
-    #samples = samples[isfin, :]
-    best_sol = samples[lnL.argmax()]
-    try:
-        acor_time = emcee.autocorr.integrated_time(samples, c=10)
-        acor_multiples = np.shape(samples)[0]/acor_time
-        print('Length chains:', np.shape(samples)[0])
-        print('Autocorrelation multiples:', acor_multiples)
-    except emcee.autocorr.AutocorrError as e:
-        print(str(e))
+        # Merge in single chains
+        samples = sampler.flatchain
+        lnL = sampler.flatlnprobability
+        # There are -np.inf in the likelihood! Why?!?
+        #inl = len(lnL)
+        #isfin = np.isfinite(lnL)
+        #lnL = lnL[isfin]
+        #print('Removed inf values:', inl - len(lnL))
+        #samples = samples[isfin, :]
+        best_sol = samples[lnL.argmax()]
+        try:
+            acor_time = emcee.autocorr.integrated_time(samples, c=10)
+            acor_multiples = np.shape(samples)[0]/acor_time
+            print('Length chains:', np.shape(samples)[0])
+            print('Autocorrelation multiples:', acor_multiples)
+        except emcee.autocorr.AutocorrError as e:
+            print(str(e))
 
-    print("Mean acceptance fraction: {0:.3f}"
-                .format(np.mean(sampler.acceptance_fraction)))
+        print("Mean acceptance fraction: {0:.3f}"
+                    .format(np.mean(sampler.acceptance_fraction)))
 
-    percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
-                        for i in np.arange(np.shape(samples)[1])]
-    spotsig2, scalef2 = plot_best_white(best_sol, t, y, yerr, datasav, \
-            initial_err, \
-            diz['chains_folder'] + 'best_MCMC_' + str(ind) + '.pdf', \
-            diz['chains_folder'] + 'entropy.p')
-    #samples[:, 3] = np.degrees(samples[:, 3])
-    titles = [r'$R_\mathrm{p}/R_\star$', \
-                    #r'$t_0$', \
-                    #r'$\rho_\star$', r'$\cos(i)$'
-                    #r'$a/R_\star$', r'$i$', \
-                    #r'$u_1$', r'$u_2$', \
-                    r'$q_1$', r'$q_2$', \
-                    r'$r_0$', r'$r_1$', \
-                    #r'$r_2$',
-                    #r'$C$', \
-                    r'$A_\mathrm{spot}$', \
-                    #'$x_0$', \
-                    r'$\sigma_\mathrm{spot}$']
-    truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
-                        [None]*(len(titles) - 1)))
-    cornerplot.cornerplot(samples, titles, truths, diz['chains_folder'] \
-                        + '/corner_' + str(ind) + '.pdf')
-    plt.close('all')
-    # Starspot size
-    size = starspot_size(diz, samples, str(ind))
+        percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
+                            for i in np.arange(np.shape(samples)[1])]
+        spotsig2, scalef2 = plot_best_white(best_sol, t, y, yerr, datasav, \
+                initial_err, wl, \
+                diz['chains_folder'] + 'best_MCMC_' + str(ind) + '.pdf', \
+                diz['chains_folder'] + 'entropy.p', \
+                diz['chains_folder'] + 'best_MCMC_' + str(ind) + '.pic')
 
-    # Save chains
-    fout = open(diz['chains_folder'] + '/chains_' + str(ind) + '.pickle', 'wb')
-    chains_save = {}
-    chains_save['wl'] = wl
-    chains_save['LM'] = soln.x
-    chains_save['Burn_in'] = [p0, lp]
-    chains_save['Chains'] = samples
-    chains_save['Starspot_size'] = size
-    chains_save['Mean_acceptance_fraction'] \
-                                        = np.mean(sampler.acceptance_fraction)
-    #chains_save['Autocorrelation_multiples'] = acor_time
-    chains_save["Percentiles"] = [percentiles]
-    chains_save["ln_L"] = lnL
-    pickle.dump(chains_save, fout)
-    fout.close()
+        #samples[:, 3] = np.degrees(samples[:, 3])
+        if wl <= 2.7:
+            titles = [r'$R_\mathrm{p}/R_\star$', \
+                        #r'$t_0$', \
+                        #r'$\rho_\star$', r'$\cos(i)$'
+                        #r'$a/R_\star$', r'$i$', \
+                        #r'$u_1$', r'$u_2$', \
+                        r'$q_1$', r'$q_2$', \
+                        r'$r_0$', r'$r_1$', \
+                        #r'$r_2$',
+                        #r'$C$', \
+                        r'$A_\mathrm{spot}$', \
+                        #'$x_0$', \
+                        r'$\sigma_\mathrm{spot}$']
+        else:
+            titles = [r'$R_\mathrm{p}/R_\star$', \
+                        #r'$t_0$', \
+                        #r'$\rho_\star$', r'$\cos(i)$'
+                        #r'$a/R_\star$', r'$i$', \
+                        #r'$u_1$', r'$u_2$', \
+                        #r'$q_1$', r'$q_2$', \
+                        r'$r_0$', r'$r_1$', \
+                        #r'$r_2$',
+                        #r'$C$', \
+                        r'$A_\mathrm{spot}$']
+                        #'$x_0$', \
+                        #r'$\sigma_\mathrm{spot}$']
+        truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
+                            [None]*(len(titles) - 1)))
+        #cornerplot.cornerplot(samples[:, :-1], titles, truths, diz['chains_folder'] \
+        #                    + '/corner_' + str(ind) + '.pdf')
+        plt.close('all')
+        # Starspot size
+        #size = starspot_size(diz, samples, str(ind))
 
-    fout = open(diz['chains_folder'] + '/chains_best_' + str(ind) + '.p', 'wb')
-    pickle.dump(best_sol, fout)
-    fout.close()
-    '''
+        # Save chains
+        fout = open(diz['chains_folder'] + '/chains_' + str(ind) + '.pickle', 'wb')
+        chains_save = {}
+        chains_save['wl'] = wl
+        chains_save['LM'] = soln.x
+        chains_save['Burn_in'] = [p0, lp]
+        chains_save['Chains'] = samples
+        #chains_save['Starspot_size'] = size
+        chains_save['Mean_acceptance_fraction'] \
+                                            = np.mean(sampler.acceptance_fraction)
+        #chains_save['Autocorrelation_multiples'] = acor_time
+        chains_save["Percentiles"] = [percentiles]
+        chains_save["ln_L"] = lnL
+        pickle.dump(chains_save, fout)
+        fout.close()
+
+        fout = open(diz['chains_folder'] + '/chains_best_' + str(ind) + '.p', 'wb')
+        pickle.dump(best_sol, fout)
+        fout.close()
     return 0., 0.#samples, spotsig
 
 # Compute ln of Gaussian distribution
@@ -389,8 +405,11 @@ def lnprior(p):
 
     #kr, t0, aR, i, q1, q2, r0, r1, r2, C, A, x0, sigma = p
     #kr, t0, q1, q2, r0, r1, r2, C, A, x0, sigma = p
-    kr, q1, q2, r0, r1, A, sigma = p
-
+    if len(p) == 7:
+        kr, q1, q2, r0, r1, A, sigma = p
+    elif len(p) == 5:
+        kr, r0, r1, A, sigma = p
+        q1, q2 = 0., 0.
     # Some restrictions:
     #if i <= np.pi/2. and 0 <= q1 <= 1. and 0. <= q2 <= 1 and sigma >= 0. \
     if kr > 0 and 0 <= q1 <= 1. and 0. <= q2 <= 1 and 1e-3 < sigma \
@@ -421,9 +440,9 @@ def lnprior(p):
         lnp_A = np.log(1./(A*np.log(0.01/1e-4))) # Jeffreys p
         #lnp_x0  = lnp(x0, 9e-2, ierrw[11])
         #lnp_sigma = lnp(sigma, 5e-3, ierrw[12])
-        lnp_sigma = np.log(1./(sigma*np.log(0.02/1e-3))) # Jeffreys p
+        #lnp_sigma = np.log(1./(sigma*np.log(0.02/1e-3))) # Jeffreys p
 
-        return lnp_kr + lnp_A + lnp_sigma
+        return lnp_kr + lnp_A #+ lnp_sigma
             #+ lnp_r0 + lnp_r1 + lnp_r2 + lnp_C + lnp_A + lnp_x0 + lnp_sigma
     else:
         return -np.inf
@@ -482,27 +501,17 @@ def plot_best_white(sol, t, y, yerr, datasav, \
     #infocontent(t, y, yerr, initial_err, jac, namentropyf, logger)
     #set_trace()
     plt.close('all')
-    uncsol = get_uncertainties.unc_minimization_lbfgsb(sol, ftol=ftol) #\
-    #ppar = params.valuesdict()
-    #kr = ppar['kr']
-    #q1 = ppar['q1']
-    #q2 = ppar['q2']
-    #r0 = ppar['r0']
-    #r1 = ppar['r1']
-    #Aspot = ppar['Aspot']
-    #sigmaSpot = ppar['sigmaSpot']
-    #pparams = [kr, q1, q2, r0, r1, Aspot, sigmaSpot]
-    #print(uncsol/params)
-    #set_trace()
-    #            /(len(y) - len(params))
-    # Save solution and uncertainties
-    fout = open(namesolLMfile, 'wb')
-    diz = {}
-    diz['sol'] = sol
-    diz['1sigma_unc'] = uncsol
-    diz['wl'] = wl
-    pickle.dump(diz, fout)
-    fout.close()
+    if type(sol) != np.ndarray:
+        uncsol = get_uncertainties.unc_minimization_lbfgsb(sol, ftol=ftol) #\
+        print('1 sigma unc for LM fit:', uncsol)
+        # Save solution and uncertainties
+        fout = open(namesolLMfile, 'wb')
+        diz = {}
+        diz['sol'] = sol
+        diz['1sigma_unc'] = uncsol
+        diz['wl'] = wl
+        pickle.dump(diz, fout)
+        fout.close()
 
     return datasav[1] - yTh_tsav, chisq
 
