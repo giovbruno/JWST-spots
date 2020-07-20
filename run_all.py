@@ -213,19 +213,24 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
                     #tdiff_output[i, j] = -(td - tbest)/(ip['tstar'] + td)*100
                     #tdiff_output_abs[i, j] = abs(td - tbest)/(ip['tstar'] + td)*100
                     #tdiff_output[i, j] = -(td - tbest)
-                    tdiff_output[i, j] = resdict[mag]['Tunc']
+                    tdiff_output[i, j] = abs(resdict[mag]['Tunc'][0] \
+                                /resdict[mag]['Tunc'][1])
+                    if np.isnan(tdiff_output[i, j]) \
+                                or tdiff_output[i, j] == np.inf:
+                        tdiff_output[i, j] = 10000
                     print(resdict[mag]['Tunc'])
                 except FileNotFoundError:
                     tdiff_output[i, j] = -999
         plt.figure()
         plt.imshow(tdiff_output.T[::-1], extent=(min(xmag), max(xmag), \
                     ip['tstar'] + ytdiff.min(), ip['tstar'] + ytdiff.max()), \
-                    aspect='auto')#, interpolation='hanning')
+                    aspect='auto', vmin=0., vmax=5.)#interpolation='hanning')
         ll = plt.colorbar()
         ll.set_label(r'$\Delta T_\mathrm{spot}$', fontsize=16)
         plt.xlabel('K mag', fontsize=16)
         plt.ylabel('$T_\mathrm{spot}$ [K]', fontsize=16)
-        plt.title(str(int(ip['tstar'])) + ' K star, ' + mod, fontsize=16)
+        plt.title(str(int(ip['tstar'])) + ' K star, ' \
+                + ip['instrument'], fontsize=16)
         plt.show()
         plt.savefig(project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/accuracy_' + mod + '.pdf')

@@ -18,9 +18,13 @@ from astropy.io import fits
 from pdb import set_trace
 sys.path.append('/home/giovanni/Dropbox/Projects/granulation/detect_LD_variations/code/Light-curve-tools/')
 import ld_coeffs
-
+from astropy.convolution import convolve
 
 modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
+foldthrough = '/home/giovanni/Dropbox/Shelf/filters/'
+thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
+thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
+thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
 
 def generate_spectrum_jwst(pardict):
 
@@ -336,7 +340,7 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         #params[4], params[5] = 300., 5.0
         #params[4], params[5] = 270, 3. # K ??
         if pardict['tstar'] == 3500 or pardict['tstar'] == 5000:
-            params[4], params[5] = 260, 3.   # M
+            params[4], params[5] = 260, 3.  # M
         #elif pardict['tstar'] == 5000:
         #    params[4], params[5] = 250, 3. # K ??
         # Contrast
@@ -348,6 +352,20 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
                             pardict['loggstar'] - 0.5).flux
         penumbram = pysynphot.Icat(models[0], pardict['tpenumbra'], 0.0, \
                             pardict['loggstar'] - 0.5).flux
+
+        # Throughput on models
+        if pardict['instrument'] == 'NIRCam/':
+            wth1, fth1 = np.loadtxt(thrfile1, unpack=True, skiprows=2)
+            wth2, fth2 = np.loadtxt(thrfile2, unpack=True, skiprows=2)
+            wth3, fth3 = np.loadtxt(thrfile3, unpack=True, skiprows=2)
+            wth = np.concatenate((wth1, wth2, wth3))
+            fth = np.concatenate((fth1, fth2, fth3))
+            #plt.plot(wl, starm)
+            #plt.plot(wl, umbram)
+            starm = integ_filter(wth, fth, wl, starm)
+            umbram = integ_filter(wth, fth, wl, umbram)
+            #plt.plot(wl, starm)
+            #plt.plot(wl, umbram)
         #wl = fits.open(modelsfolder \
         #            +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
         #starm = fits.open(modelsfolder + 'lte0' + str(int(pardict['tstar'])) \
@@ -361,7 +379,9 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
         contrast = umbram/starm
         contrastp = penumbram/starm
-
+        #plt.plot(wl, contrast)
+        #plt.show()
+        #set_trace()
         if i == 0:
             chanleft = xobs[i] ##wl.min()*1e-4
         else:
@@ -401,8 +421,10 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         # Delta x^2 = 2 x Delta x
         #relsigma_i = np.zeros(len(tt)) + relsigma[i]/(2.*(yobs[i]**0.5))
         plt.close('all')
+        #plt.plot(tt, transit - transit[0])
         plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
-        #set_trace()
+        #plt.show()
+
         '''
         flagv = np.logical_and(tt > 0.07491, tt < 0.084)
         flago = np.logical_and(tt > 0.07264, tt < 0.08986)
@@ -456,3 +478,12 @@ def air_to_vacuum(wl):
     wl_vac = ratio*wl + wl
 
     return wl_vac
+
+def integ_filter(wth, fth, wmodel, fmodel):
+
+    fth_int = interp1d(wth, fth, bounds_error=False, fill_value=0.)
+    fthgrid = fth_int(wmodel)
+    fthgrid[fthgrid < 1e-6] = 0.
+    #fintegrated = np.trapz(fmodel*fthgrid, wmodel)
+    fintegrated = fmodel*fthgrid
+    return fintegrated
