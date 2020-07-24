@@ -183,7 +183,7 @@ def transit_emcee(diz, ind, mcmc):
     params.add('r1', value=-1., min=-2., max=2.)
     #bounds_model.append((None,  None))    # r2
     #bounds_model.append((0.95, 1.05)) # C
-    bounds_model.append((1e-4, 1.)) # A
+    bounds_model.append((-1, 1.)) # A
     params.add('Aspot', value=1e-3, min=1e-4, max=1.)
     #bounds_model.append((0.15, 0.2)) # xr F star
     #bounds_model.append((0.09, 0.11)) # K, M  # x0 = 0.1051
@@ -237,7 +237,7 @@ def transit_emcee(diz, ind, mcmc):
         bounds_model2.append((0.01, 0.2)) # kr
         bounds_model2.append((-1., 1.))    #r0
         bounds_model2.append((0., 2.))    # r1
-        bounds_model2.append((1e-4, 1.)) # A
+        bounds_model2.append((-1, 1.)) # A
         bounds_model2.append((1e-3, 0.01)) # sigma
         initial_params = kr, r0, r1, A, sigma
         soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
@@ -280,12 +280,12 @@ def transit_emcee(diz, ind, mcmc):
         # Test that initial values are within priors
         if np.sum(p0[:, 0] < 0) > 0:
             p0[:, 0][p0[:, 0] < 0] = abs(p0[:, 0][p0[:, 0] < 0])
-        if np.sum(p0[:, 1] < 0) > 0:
-            p0[:, 1][p0[:, 1] < 0.] = abs(p0[:, 1][p0[:, 1] < 0.])
-        if np.sum(p0[:, 2] < 0) > 0:
-            p0[:, 3][p0[:, 2] < 0.] = abs(p0[:, 2][p0[:, 2] < 0.])
-        if np.sum(p0[:, -2] < 0) > 0:
-            p0[:, -2][p0[:, -2] <= 0] = abs(p0[:, -2][p0[:, -2] <= 0])
+        #if np.sum(p0[:, 1] < 0) > 0:
+        #    p0[:, 1][p0[:, 1] < 0.] = abs(p0[:, 1][p0[:, 1] < 0.])
+        #if np.sum(p0[:, 2] < 0) > 0:
+        #    p0[:, 3][p0[:, 2] < 0.] = abs(p0[:, 2][p0[:, 2] < 0.])
+        #if np.sum(p0[:, -2] < 0) > 0:
+        #    p0[:, -2][p0[:, -2] <= 0] = abs(p0[:, -2][p0[:, -2] <= 0])
         if np.sum(p0[:, -1] < 0) > 0:
             p0[:, -1][p0[:, -1] <= 0] = abs(p0[:, -1][p0[:, -1] <= 0])
 
@@ -412,8 +412,8 @@ def lnprior(p):
         q1, q2 = 0., 0.
     # Some restrictions:
     #if i <= np.pi/2. and 0 <= q1 <= 1. and 0. <= q2 <= 1 and sigma >= 0. \
-    if kr > 0 and 0 <= q1 <= 1. and 0. <= q2 <= 1 and 1e-3 < sigma \
-            and 1e-4 < A: # and 0.08 < x0 < 0.12:
+    if kr > 0 and 0 <= q1 <= 1. and 0. <= q2 <= 1 and 1e-3 < sigma:
+        #    and 1e-4 < A: # and 0.08 < x0 < 0.12:
                 #and var > 0: #and sigma < 5e-2 #and A > 1e-5 :
         #lnp_kr = lnp(kr, 0.1, ierrw[0])
         lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
@@ -437,12 +437,12 @@ def lnprior(p):
         lnp_C  = lnp(C, 1., ierrw[9])
         '''
         #lnp_A  = lnp(A, 5e-3, ierrw[10])
-        lnp_A = np.log(1./(A*np.log(0.01/1e-4))) # Jeffreys p
+        #lnp_A = np.log(1./(A*np.log(0.01/1e-4))) # Jeffreys p
         #lnp_x0  = lnp(x0, 9e-2, ierrw[11])
         #lnp_sigma = lnp(sigma, 5e-3, ierrw[12])
         #lnp_sigma = np.log(1./(sigma*np.log(0.02/1e-3))) # Jeffreys p
 
-        return lnp_kr + lnp_A #+ lnp_sigma
+        return lnp_kr #+ lnp_A #+ lnp_sigma
             #+ lnp_r0 + lnp_r1 + lnp_r2 + lnp_C + lnp_A + lnp_x0 + lnp_sigma
     else:
         return -np.inf

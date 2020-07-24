@@ -189,9 +189,11 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
     xmag = mags
     ytdiff = tcontrast
     tdiff_output = np.zeros((len(xmag), len(ytdiff)))
+    tdiff_unc = np.zeros(len(xmag))
     #tdiff_output_abs = np.copy(tdiff_output)
     for mod in models:
         for i, mag in enumerate(mags):
+            uncT = []
             for j, td in enumerate(tcontrast):
                 tumbra = ip['tstar'] + tcontrast
                 homedir = os.path.expanduser('~')
@@ -215,25 +217,45 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
                     #tdiff_output[i, j] = -(td - tbest)
                     tdiff_output[i, j] = abs(resdict[mag]['Tunc'][0] \
                                 /resdict[mag]['Tunc'][1])
+                    uncT.append(resdict[mag]['Tunc'][1])
                     if np.isnan(tdiff_output[i, j]) \
                                 or tdiff_output[i, j] == np.inf:
                         tdiff_output[i, j] = 10000
                     print(resdict[mag]['Tunc'])
                 except FileNotFoundError:
                     tdiff_output[i, j] = -999
+            tdiff_unc[i] = np.mean(uncT)
+
+        #fig1 = plt.figure(1, figsize=(9, 7))
+        #frame2 = fig1.add_axes((.1,.1,.8,.2))
+        #frame1 = fig1.add_axes((.1,.3,.8,.6), sharex=frame2)
         plt.figure()
         plt.imshow(tdiff_output.T[::-1], extent=(min(xmag), max(xmag), \
                     ip['tstar'] + ytdiff.min(), ip['tstar'] + ytdiff.max()), \
-                    aspect='auto', vmin=0., vmax=5.)#interpolation='hanning')
-        ll = plt.colorbar()
-        ll.set_label(r'$\Delta T_\mathrm{spot}$', fontsize=16)
+                    aspect='auto', vmin=0., vmax=5., \
+                    cmap=plt.get_cmap('plasma'))#interpolation='hanning')
+        ll = plt.colorbar()#ax=frame1)
+        ll.set_label(r'$\Delta T_\bullet \, [\sigma]$', fontsize=16)
         plt.xlabel('K mag', fontsize=16)
-        plt.ylabel('$T_\mathrm{spot}$ [K]', fontsize=16)
+        plt.ylabel(r'$T_\bullet$ [K]', fontsize=16)
         plt.title(str(int(ip['tstar'])) + ' K star, ' \
                 + ip['instrument'], fontsize=16)
         plt.show()
         plt.savefig(project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/accuracy_' + mod + '.pdf')
+        #plt.subplot(212)#figure()
+        #frame2.plot(mags, tdiff_unc, 'ko-')
+        #frame2.set_xlabel('K mag', fontsize=16)
+        #frame2.set_ylabel(r'$\sigma(T_\mathrm{spot})$ [K]', fontsize=16)
+        #plt.show()
+        #plt.savefig(project_folder + instrument + 'star_' \
+        #        + str(int(ip['tstar'])) + 'K/accuracy_' + mod + '.pdf')
+
+        # Save uncertainty array
+        fout = open(project_folder + instrument + 'star_' \
+                + str(int(ip['tstar'])) + 'K/' + 'uncertainty_array.pic', 'wb')
+        pickle.dump([mags, tdiff_unc], fout)
+        fout.close()
 
     return
 
@@ -261,5 +283,25 @@ def map_uncertainties(mags, tcontrast, ip):
     plt.show()
     plt.savefig(project_folder + instrument + 'star_' \
             + str(int(ip['tstar'])) + 'K/map_uncertainties.pdf')
+
+    return
+
+def plot_unc_results(instrument):
+
+    homedir = os.path.expanduser('~')
+    colr = ['orange', 'royalblue']
+    tspot = [3500, 5000]
+    for i, ti in enumerate(tspot):
+        filres = homedir + '/Dropbox/Projects/jwst_spots/' + instrument \
+                + '/star_' + str(ti) + 'K/uncertainty_array.pic'
+        ff = pickle.load(open(filres, 'rb'))
+        plt.plot(ff[0], ff[1], 'o-', label=str(ti) + ' K', color=colr[i])
+    plt.legend(frameon=False, fontsize=12)
+    plt.xlabel('K mag', fontsize=16)
+    plt.ylabel(r'$\Delta T_\bullet$ [K]', fontsize=16)
+    plt.title(instrument, fontsize=16)
+    plt.show()
+    plt.savefig(homedir + '/Dropbox/Projects/jwst_spots/' + instrument \
+                + '/result_uncertainties_' + instrument + '.pdf')
 
     return

@@ -187,10 +187,10 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         dict_results[pm] = {}
         dict_results[pm][stmod] = {}
         if pardict['tstar'] == 3500:
-            tspot_ = np.arange(2300, pardict['tstar'] - 200, 25)
+            tspot_ = np.arange(2300, pardict['tstar'] - 50, 25)
             #tspot_ = np.array([2700, 3100])
         else:
-            tspot_ = np.arange(3300, pardict['tstar'] - 200, 25)
+            tspot_ = np.arange(3300, pardict['tstar'] - 50, 25)
             #tspot_ = np.array([3500, 3900])#, 4100])
         tspot_ = tspot_[tspot_ != pardict['tstar']]
         likelihood = np.zeros(len(tspot_)) + np.inf
@@ -219,7 +219,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
                 soln = least_squares(scalespec, [0.], \
                             bounds=boundsm, args=(specA, A, yerrfit))
                 #scale_unc = getunc.unc_jac(soln.fun, soln.jac, len(yerrfit) - 1)
-                print(temp, 'K Spectrum scaling factor:', soln.x[0])#, '+/-', \
+                print(temp, 'K, spectrum shifting factor:', soln.x[0])#, '+/-', \
                 #                    scale_unc[0])
                 # Rescale uncertainties
                 #chi2t = np.sum((specA + soln.x[0] - A)**2/yerrfit**2)
@@ -296,7 +296,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
 
         #plt.legend(frameon=False, loc='best', fontsize=16)
         plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
-        plt.ylabel('Transit depth rise [relative]', fontsize=16)
+        plt.ylabel('Relative flux rise', fontsize=16)
         #chi2min = np.argmin(chi2)
         maxL = np.argmax(likelihood)
         #print('chi2 min =', chi2[chi2min], 'with Tspot =', \
@@ -306,7 +306,8 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         plt.title(pardict['instrument'][:-1] \
            #+ r', $\min (\tilde{\chi}^2)=$' \
            #+ str(np.round(chi2red[chi2min], 2)) \
-           + r', $T_\mathrm{spot}=$' + str(tspot_[maxL]) + ' K', fontsize=16)
+           + r', best fit: $T_\bullet=$' + str(int(tspot_[maxL])) + ' K', \
+            fontsize=16)
         plt.xlim(wl.min() - 0.2, wl.max() + 0.2)
         #plt.ylim(0., 6000)
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
@@ -333,6 +334,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
 
     # Create PDF with the prob sampling
     pdf = stats.rv_discrete(a=x.min(), b=x.max(), values=(x, prob))
+    set_trace()
     Tmean = pdf.mean()
     Tconf = [pdf.std(), pdf.std()]
     Tconf = pdf.interval(0.642) # % 64.2% confence interval
@@ -345,6 +347,8 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
     #else:
     #    Tsigma = abs(dist)/(pdf.median() - Tconf[0])
     Tsigma = pdf.std()
+    if Tsigma < np.diff(tspot_)[0]:
+        Tsigma = np.diff(tspot_)[0]
     # Fit a Gaussian centered here
     #bbounds = ([0, x.min(), 50], [2*valmax, x.max(), 1000.])
     #fitgauss = lambda p, t, u: (u - gauss(p, t))**2
@@ -711,7 +715,8 @@ def compare_contrast_spectra(tstar, loggstar, tspot):
     #starflux = fits.open(modelsfolder + 'lte0' + str(tstar) \
     #            + '-' + '{:3.2f}'.format(loggstar) \
     #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
-    wnew = np.linspace(0.6, 5.3, 100)
+    wnew = np.linspace(0.6, 5.3, 1000)
+    #wnew = wl*1e-4
     starflux = degrade_spec(starflux, wl, wnew)
     #wl = wl[::100]
     #starflux = starflux[::100]
@@ -738,10 +743,10 @@ def compare_contrast_spectra(tstar, loggstar, tspot):
         plt.plot(wl*1e-4, contrast, 'k', alpha=0.5)
 
     plt.xlim(0.6, 5.2)
-    plt.ylim(0, 1.1)
-    plt.xlabel(r'Wavelenght [$\mu$m]', fontsize=14)
-    plt.ylabel('Brightness contrast', fontsize=14)
-    plt.title('Star: ' + str(tstar) + ' K', fontsize=16)
+    plt.ylim(-0.1, 1.1)
+    plt.xlabel(r'Wavelength [$\mu$m]', fontsize=14)
+    plt.ylabel(r'Brightness contrast ($A_\lambda$)', fontsize=14)
+    plt.title('$T_\star=$ ' + str(tstar) + ' K', fontsize=16)
     plt.legend(frameon=False)
     plt.show()
     plt.savefig('/home/giovanni/Dropbox/Projects/jwst_spots/contrast_model_' \
