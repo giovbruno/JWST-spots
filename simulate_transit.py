@@ -2,7 +2,7 @@
 # spot occultations.
 
 import sys
-sys.path.append('/home/giovanni/Dropbox/Shelf/python/pandexo/')
+#sys.path.append('/home/giovanni/Dropbox/Shelf/python/pandexo/')
 import warnings
 warnings.filterwarnings('ignore')
 import pandexo.engine.justdoit as jdi # THIS IS THE HOLY GRAIL OF PANDEXO
@@ -13,18 +13,21 @@ import numpy as np
 import pysynphot
 import pathlib
 import rebin
-import pickle, os
+import pickle
+import os
 from astropy.io import fits
-from pdb import set_trace
 sys.path.append('/home/giovanni/Dropbox/Projects/granulation/detect_LD_variations/code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
+from spectra_fit import degrade_spec
+from pdb import set_trace
 
 modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
 foldthrough = '/home/giovanni/Dropbox/Shelf/filters/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
+thrfile4 = foldthrough + 'JWST_NIRSpec.CLEAR.dat'
 
 def generate_spectrum_jwst(pardict):
 
@@ -43,13 +46,23 @@ def generate_spectrum_jwst(pardict):
     exo_dict['observation']['baseline_unit'] = 'frac'
     exo_dict['observation']['noise_floor'] = 20   #this can be a fixed level
                                                   #or it can be a filepath
-    exo_dict['star']['type'] = 'phoenix'  #phoenix or user (if you have your own)
     exo_dict['star']['mag'] = pardict['magstar']     #magnitude of the system
     exo_dict['star']['ref_wave'] = 1.25   #For J mag = 1.25, H = 1.6, K =2.22..
                                           #etc (all in micron)
-    exo_dict['star']['temp'] = pardict['tstar']     #in K
-    exo_dict['star']['metal'] = 0.0        # as log Fe/H
-    exo_dict['star']['logg'] = pardict['loggstar']
+
+    if not pardict['spotted_starmodel']:
+        exo_dict['star']['temp'] = pardict['tstar']     #in K
+        exo_dict['star']['metal'] = 0.0        # as log Fe/H
+        exo_dict['star']['logg'] = pardict['loggstar']
+    else:
+        exo_dict['star']['type'] = 'user'
+        generate_spotted_spectra(pardict['tstar'], pardict['loggstar'], \
+                pardict['tumbra'], pardict['loggstar'] - 0.5, \
+                np.radians(pardict['aumbra'])**2, pardict)
+        exo_dict['star']['starpath'] = pardict['data_folder'] + 'spotted_star.dat'
+        exo_dict['star']['w_unit'] = 'Angs'
+        exo_dict['star']['f_unit'] = 'FLAM'
+
     exo_dict['star']['radius'] = pardict['rstar']
     exo_dict['star']['r_unit'] = 'R_sun'
 
@@ -63,14 +76,16 @@ def generate_spectrum_jwst(pardict):
     exo_dict['planet']['td_unit'] = 'h'
     exo_dict['planet']['f_unit'] = 'rp^2/r*^2'
 
-
-    #inst_dict = jdi.load_mode_dict('NIRSpec Prism')
-    #inst_dict["configuration"]["detector"]["subarray"] = 'sub512'
-    #inst_dict["configuration"]["detector"]["readmode"] = 'nrs'
-    set_trace()
+    inst_dict = jdi.load_mode_dict('NIRSpec Prism')
+    inst_dict["configuration"]["detector"]["ngroup"] = 'optimize'
+    #   inst_dict["configuration"]["detector"]["subarray"] = 'sub512'
+    #   inst_dict["configuration"]["detector"]["readmode"] = 'nrs'
     print('Starting PandExo run for JWST')
-    jdi.run_pandexo(exo_dict, ['NIRSpec Prism'], save_file=True, \
+    jdi.run_pandexo(exo_dict, inst_dict, save_file=True, \
             output_file=pardict['pandexo_out_jwst'])
+
+    #jdi.run_pandexo(exo_dict, inst_dict, save_file=True, \
+    #        output_file=pardict['pandexo_out_jwst'])
     '''
     # Load in output from run
     out = pickle.load(open(pardict['pandexo_out'],'rb'))
@@ -196,6 +211,11 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         # First and last one must have some rebinning problem
         xobs, yobs, yobs_err = simultr[0], simultr[1], simultr[2]
 
+    if pardict['spotted_starmodel'] and pardict['instrument'] == 'NIRCam/':
+        yobs = spotted_transmsp(xobs, yobs, pardict['tstar'], \
+                pardict['loggstar'], pardict['tumbra'], \
+                pardict['loggstar'] - 0.5, np.radians(pardict['aumbra'])**2,\
+                pardict)
     # Save transmission spectrum
     savespec = open(pardict['data_folder'] + 'spec_model_' + instrument \
                     + '.pic', 'wb')
@@ -222,14 +242,14 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
                 wl_bin_low = xobs[i] - np.diff(xobs)[i - 1]/2.
                 wl_bin_up = xobs[i] + np.diff(xobs)[i - 1]/2.
             if ldendname == 'prism':
-                thrfile = 'None'
+                thrfile \
+                = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRSpec.CLEAR.dat'
             elif ldendname == 'nircam' and xobs[i] < 2.4:
                 thrfile \
                 = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F150W2.dat'
             elif ldendname == 'nircam' and xobs[i] >= 2.4:
                 thrfile \
                 = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F322W2.dat'
-
             ww_, LDcoeffs_ = ld_coeffs.fit_law(pardict['tstar'], \
                 pardict['loggstar'], 0.0, thrfile=thrfile, grid='phoenix', \
                 wlmin=wl_bin_low, wlmax=wl_bin_up, nchannels=1, plots=False)
@@ -308,20 +328,7 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         params = np.zeros(8 + 3) # second spot is penumbra
         params[0] = yobs[i]**0.5 # kr
         params[1] = 252 # M, K
-        #params[1] = 232. # F
-        # LD coeffs
-        '''
-        if type(uared) == np.float64:
-            uared = [uared]
-            ubred = [ubred]
-        if i < len(uablue):
-            params[2], params[3] = uablue[i], ubblue[i]
-        elif i - len(uablue) < len(uared):
-            params[2], params[3] = uared[i - len(uablue)], \
-                                                        ubred[i - len(uablue)]
-        else:
-            params[2], params[3] = 0., 0.
-        '''
+
         #if i < len(xobs) - 2:
         #    wl_bin_low = xobs[i] - np.diff(xobs)[i]/2.
         #    wl_bin_up = xobs[i] + np.diff(xobs)[i + 1]/2.
@@ -333,37 +340,51 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         #        pardict['loggstar'], 0.0, thrfile=None, grid='phoenix', \
         #        wlmin=wl_bin_low, wlmax=wl_bin_up, nchannels=2, plots=False)
         params[2], params[3] = ldlist[i][0], ldlist[i][1]
-        #params[2], params[3] = 0.3, 0.3
-        #params[2], params[3] = ua[i], ub[i]
-        #params[2], params[3] = 0.2, 0.2
-        # Long, size
-        #params[4], params[5] = 300., 5.0
-        #params[4], params[5] = 270, 3. # K ??
         if pardict['tstar'] == 3500 or pardict['tstar'] == 5000:
-            params[4], params[5] = 260, 3.  # M
+            params[4], params[5] = 260, pardict['aumbra']  # M
         #elif pardict['tstar'] == 5000:
         #    params[4], params[5] = 250, 3. # K ??
         # Contrast
-        modstar = pysynphot.Icat(models[0], pardict['tstar'], 0.0, \
+        if not pardict['spotted_starmodel']:
+            modstar = pysynphot.Icat(models[0], pardict['tstar'], 0.0, \
                             pardict['loggstar'])
-        wl = modstar.wave
-        starm = modstar.flux
+            wl = modstar.wave
+            starm = modstar.flux
+        else:
+            if pardict['instrument'] == 'NIRCam/':
+                generate_spotted_spectra(pardict['tstar'], \
+                        pardict['loggstar'], pardict['tumbra'], \
+                        pardict['loggstar'] - 0.5, \
+                        np.radians(pardict['aumbra'])**2, pardict)
+            wl, starm = np.loadtxt(pardict['data_folder'] \
+                + 'spotted_star.dat', unpack=True)
+        wlumbra = pysynphot.Icat(models[0], pardict['tumbra'], 0.0, \
+                            pardict['loggstar'] - 0.5).wave
         umbram =  pysynphot.Icat(models[0], pardict['tumbra'], 0.0, \
                             pardict['loggstar'] - 0.5).flux
         penumbram = pysynphot.Icat(models[0], pardict['tpenumbra'], 0.0, \
                             pardict['loggstar'] - 0.5).flux
+        fflag = wl < 60000.
+        wl = wl[fflag]
+        starm = starm[fflag]
+        fflagu = wlumbra < 60000.
+        umbram = umbram[fflagu]
+        penumbram = penumbram[fflagu]
 
         # Throughput on models
         if pardict['instrument'] == 'NIRCam/':
-            wth1, fth1 = np.loadtxt(thrfile1, unpack=True, skiprows=2)
-            wth2, fth2 = np.loadtxt(thrfile2, unpack=True, skiprows=2)
-            wth3, fth3 = np.loadtxt(thrfile3, unpack=True, skiprows=2)
+            wth1, fth1 = np.loadtxt(thrfile1, unpack=True)#, skiprows=2)
+            wth2, fth2 = np.loadtxt(thrfile2, unpack=True)#, skiprows=2)
+            wth3, fth3 = np.loadtxt(thrfile3, unpack=True)#, skiprows=2)
             wth = np.concatenate((wth1, wth2, wth3))
             fth = np.concatenate((fth1, fth2, fth3))
             #plt.plot(wl, starm)
             #plt.plot(wl, umbram)
-            starm = integ_filter(wth, fth, wl, starm)
-            umbram = integ_filter(wth, fth, wl, umbram)
+        elif pardict['instrument'] == 'NIRSpec_Prism/':
+            wth, fth = np.loadtxt(thrfile4, unpack=True)
+            wth*= 1e4
+        starm = integ_filter(wth, fth, wl, starm)
+        umbram = integ_filter(wth, fth, wl, umbram)
             #plt.plot(wl, starm)
             #plt.plot(wl, umbram)
         #wl = fits.open(modelsfolder \
@@ -379,9 +400,7 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
         contrast = umbram/starm
         contrastp = penumbram/starm
-        #plt.plot(wl, contrast)
-        #plt.show()
-        #set_trace()
+
         if i == 0:
             chanleft = xobs[i] ##wl.min()*1e-4
         else:
@@ -392,7 +411,6 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
             chanright = (xobs[i] + 0.5*(xobs[i + 1] - xobs[i])) #* u.micrometer
         wlcenter = np.mean([chanleft, chanright]) #* u.micrometer
         wlbin = np.logical_and(wl*1e-4 >= chanleft, wl*1e-4 <= chanright)
-
         params[6] = 1. - np.mean(contrast[wlbin]) # Contrast spot 1
         rise.append(params[6])
         # Some numberical problems in the models?
@@ -406,14 +424,22 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         print('Channel', str(i), ', Kr =', np.round(params[0], 3), \
                         'Contrast umbra =', np.round(params[6], 3))#, \
                         #'Contrast penumbra =', np.round(params[9], 3))
-        tt = np.arange(0., 0.2, 120.*1./86400.)  # M, K
+        #tt = np.arange(0., 0.2, 120.*1./86400.)  # M, K
         #tt = np.arange(0., 0.4, 60.*1./86400.) # F star
+        # Define in-transit/out-of-transit duration
+        if pardict['tstar'] == 3500:
+            tt = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
+        elif pardict['tstar'] == 5000:
+            tt = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
         transit = ksint_wrapper_fitcontrast.main(params, tt, fix_dict)
         # White noise
-        unckr = 1./(2.*params[0])*yobs_err[i]
-        transit *= np.random.normal(loc=1., scale=unckr*2**0.5, \
+        #unckr = 1./(2.*params[0])*yobs_err[i]
+        uncph = yobs_err[i]*len(tt)**0.5/2.
+        transit *= np.random.normal(loc=1., scale=uncph, \
+                                    #*2**0.5, \
                                     size=len(tt))
-        yerr = np.zeros(len(transit)) + unckr*2**0.5
+        yerr = np.zeros(len(transit)) + uncph#*2**0.5
+
         #transit *= np.random.normal(loc=1., scale=yobs_err[i]*len(tt)**0.5, \
         #                            size=len(tt))
         #yerr = np.zeros(len(transit)) + np.mean(yobs_err[i])*len(tt)**0.5
@@ -421,9 +447,7 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         # Delta x^2 = 2 x Delta x
         #relsigma_i = np.zeros(len(tt)) + relsigma[i]/(2.*(yobs[i]**0.5))
         plt.close('all')
-        #plt.plot(tt, transit - transit[0])
         plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
-        #plt.show()
 
         '''
         flagv = np.logical_and(tt > 0.07491, tt < 0.084)
@@ -436,7 +460,6 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         plt.xlabel('Time [d]', fontsize=16)
         plt.ylabel('Relative flux', fontsize=16)
         plt.title('Channel: ' + str(round(xobs[i], 3)) + ' $\mu$m', fontsize=16)
-        #plt.legend(loc='best', fontsize=16, frameon=False)
         plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
                         + '_' + instrument + '.pdf')
         savefile = open(pardict['data_folder'] + 'transit_spots' \
@@ -444,13 +467,7 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         pickle.dump([tt, transit, yerr, xobs[i]], savefile)
         savefile.close()
 
-    # Remove pandexo plot files
-    #os.system('rm *html')
-    #plt.figure()
-    #plt.plot(xobs, np.array(rise)/min(rise), 'o')
-    #plt.show()
-
-    return len(xobs) #i#tt, transit
+    return len(xobs)
 
 def channelmerge(pardict, ch1, ch2):
     '''
@@ -487,3 +504,53 @@ def integ_filter(wth, fth, wmodel, fmodel):
     #fintegrated = np.trapz(fmodel*fthgrid, wmodel)
     fintegrated = fmodel*fthgrid
     return fintegrated
+
+def generate_spotted_spectra(tstar, loggstar, tspot, loggspot, delta, pardict):
+    '''
+    Generate spotted stellar spectrum.
+
+    Parameters
+    ----------
+    delta: starspot filling factor.
+    '''
+    mm = pysynphot.Icat('phoenix', tstar, 0.0, loggstar)
+    star = mm.flux
+    wl = mm.wave
+    spot = pysynphot.Icat('phoenix', tspot, 0.0, loggspot).flux
+    newstar = star*(1. - delta) + delta*spot
+    fout = open(pardict['data_folder'] + 'spotted_star.dat', 'w')
+    np.savetxt(fout, np.transpose(np.array([wl, newstar])))
+
+    return
+
+def spotted_transmsp(wtransnm, ytransm, tstar, loggstar, tspot, loggspot, \
+                    delta, pardict):
+    '''
+    Apply starspot effect to a transmission spectrum. See McCullough+2014, eq. 1.
+
+    Parameters
+    ----------
+    wtransnm, ytransm: wl and transit depth of transmission spectrum.
+    '''
+    mm = pysynphot.Icat('phoenix', tstar, 0.0, loggstar)
+    star = mm.flux
+    wave = mm.wave
+    spot = pysynphot.Icat('phoenix', tspot, 0.0, loggspot).flux
+    if pardict['instrument'] == 'NIRSpec_Prism/':
+        wth, fth = np.loadtxt(thrfile4, unpack=True)
+        wth*= 1e4
+    elif pardict['instrument'] == 'NIRCam/':
+        wth1, fth1 = np.loadtxt(thrfile1, unpack=True)#, skiprows=2)
+        wth2, fth2 = np.loadtxt(thrfile2, unpack=True)#, skiprows=2)
+        wth3, fth3 = np.loadtxt(thrfile3, unpack=True)#, skiprows=2)
+        wth = np.concatenate((wth1, wth2, wth3))
+        fth = np.concatenate((fth1, fth2, fth3))
+    # Apply filter throughput and degrade resolution
+    star = integ_filter(wth, fth, wave, star)
+    spot = integ_filter(wth, fth, wave, spot)
+    star = degrade_spec(star, wave, wtransnm)
+    spot = degrade_spec(spot, wave, wtransnm)
+
+    newtransm = ytransm/(1. - delta*(1. - spot/star))
+
+    return newtransm

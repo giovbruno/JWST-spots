@@ -2,7 +2,7 @@
 import numpy as np
 from pdb import set_trace
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize, least_squares, leastsq
+from scipy.optimize import minimize, least_squares, leastsq, basinhopping
 from scipy.optimize._numdiff import approx_derivative
 import emcee
 import os, sys, pickle, glob, logging, pathlib
@@ -116,7 +116,7 @@ def transit_emcee(diz, ind, mcmc):
     lcfile.close()
     global wl
     t, y, yerr, wl = lc
-    t -= t.min()
+    #t -= t.min()
 
     #flag = np.logical_and(t > 0.05, t < 0.15)
     #t, y, yerr = t[flag], y[flag], yerr[flag]
@@ -232,6 +232,8 @@ def transit_emcee(diz, ind, mcmc):
     if wl <= 2.7:
         soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
                     args=(t, y, yerr), bounds=bounds_model, options=options)
+        #soln = basinhopping(nll, initial_params, bounds_model, args=(t, y, yerr), \
+        #    options=dict(jac=False), minimizer_kwargs=dict(method='L-BFGS-B'))
     else:
         bounds_model2 = []
         bounds_model2.append((0.01, 0.2)) # kr
@@ -242,6 +244,8 @@ def transit_emcee(diz, ind, mcmc):
         initial_params = kr, r0, r1, A, sigma
         soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
                     args=(t, y, yerr), bounds=bounds_model2, options=options)
+        #soln = basinhopping(nll, initial_params, bounds_model2, args=(t, y, yerr), \
+        #    options=dict(jac=False), minimizer_kwargs=dict(method='L-BFGS-B'))
     #soln = lmfit.minimize(nll, params, args=(t, y, yerr), calc_covar=True, \
     #            method='lbfgsb', **kws)
     #mini = lmfit.Minimizer(nll, params)
@@ -289,7 +293,7 @@ def transit_emcee(diz, ind, mcmc):
         if np.sum(p0[:, -1] < 0) > 0:
             p0[:, -1][p0[:, -1] <= 0] = abs(p0[:, -1][p0[:, -1] <= 0])
 
-        nsteps = 100
+        nsteps = 150
         width = 30
 
         for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
@@ -301,7 +305,7 @@ def transit_emcee(diz, ind, mcmc):
 
         # Now, restart the exploration
         print("Running production...")
-        nsteps = 300
+        nsteps = 400
         width = 30
         for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
             n = int((width+1) * float(i) / nsteps)
@@ -495,7 +499,7 @@ def plot_best_white(sol, t, y, yerr, datasav, \
     frame2.set_xlim(t.min() - 0.002, t.max() + 0.002)
     frame2.set_ylabel('Residuals [ppm]', fontsize=16)
     frame2.set_xlabel('Time [days]', fontsize=16)
-    plt.title('Transit + starspot', fontsize=18)
+    plt.title('Joint transit-starspot fit', fontsize=18)
     plt.show()
     plt.savefig(plotname)
     #infocontent(t, y, yerr, initial_err, jac, namentropyf, logger)

@@ -27,6 +27,7 @@ foldthrough = '/home/giovanni/Dropbox/Shelf/filters/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
+thrfile4 = foldthrough + 'JWST_NIRSpec.CLEAR.dat'
 
 plt.ioff()
 
@@ -310,6 +311,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
             fontsize=16)
         plt.xlim(wl.min() - 0.2, wl.max() + 0.2)
         #plt.ylim(0., 6000)
+        plt.legend(frameon=False, loc='upper right')
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
         plt.close('all')
 
@@ -334,7 +336,6 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
 
     # Create PDF with the prob sampling
     pdf = stats.rv_discrete(a=x.min(), b=x.max(), values=(x, prob))
-    set_trace()
     Tmean = pdf.mean()
     Tconf = [pdf.std(), pdf.std()]
     Tconf = pdf.interval(0.642) # % 64.2% confence interval
@@ -433,21 +434,30 @@ def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
     wl: array to degrade the model spectrum
     '''
 
-    # This is in Angstroms
-    if stmodel == 'ck04models' or stmodel == 'phoenix':
+    # This is in Angstroms.
+    # You should already have computed spooted models, if needed
+    if not pardict['spotted_starmodel']:
         wave = pysynphot.Icat(stmodel, pardict['tstar'], 0.0, \
                 pardict['loggstar']).wave
         star = pysynphot.Icat(stmodel, pardict['tstar'], 0.0, \
                 pardict['loggstar']).flux
+    else:
+        wave, star = np.loadtxt(pardict['data_folder'] \
+                    + 'spotted_star.dat', unpack=True)
 
-    if pardict['instrument'] == 'NIRCam/':
-        wth1, fth1 = np.loadtxt(thrfile1, unpack=True, skiprows=2)
-        wth2, fth2 = np.loadtxt(thrfile2, unpack=True, skiprows=2)
-        wth3, fth3 = np.loadtxt(thrfile3, unpack=True, skiprows=2)
+    if pardict['instrument'] == 'NIRSpec_Prism/':
+        wth, fth = np.loadtxt(thrfile4, unpack=True)
+        wth*= 1e4
+    elif pardict['instrument'] == 'NIRCam/':
+        wth1, fth1 = np.loadtxt(thrfile1, unpack=True)#, skiprows=2)
+        wth2, fth2 = np.loadtxt(thrfile2, unpack=True)#, skiprows=2)
+        wth3, fth3 = np.loadtxt(thrfile3, unpack=True)#, skiprows=2)
         wth = np.concatenate((wth1, wth2, wth3))
         fth = np.concatenate((fth1, fth2, fth3))
-        star = simulate_transit.integ_filter(wth, fth, wave, star)
-
+    star = simulate_transit.integ_filter(wth, fth, wave, star)
+    fflag = wave < 60000.
+    wave = wave[fflag]
+    star = star[fflag]
     #wnew = wave.copy()*1e-4
     #elif stmodel == 'phoenix':
     #    wave = fits.open(modelsfolder \
@@ -479,19 +489,24 @@ def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
 
     for i in tspot:
         if stmodel == 'ck04models' or stmodel == 'phoenix':
+            wls = pysynphot.Icat(stmodel, i, 0.0, \
+                                            pardict['loggstar'] - 0.5).wave
             spot = pysynphot.Icat(stmodel, i, 0.0, \
                                             pardict['loggstar'] - 0.5).flux
+            fflagu = wls < 60000.
+            wls = wls[fflagu]
+            spot = spot[fflagu]
         #elif stmodel == 'phoenix':
         #    spot = fits.open(modelsfolder + 'lte0' + str(i) \
         #            + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
         #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
-        if pardict['instrument'] == 'NIRCam/':
-            spot = simulate_transit.integ_filter(wth, fth, wave, spot)
-
+        #if pardict['instrument'] == 'NIRCam/':
+        spot = simulate_transit.integ_filter(wth, fth, wls, spot)
         #specnew = spot#(1 - ffact)*star + ffact*spot
         #rebnew, errnew = rebin.rebin_spectrum(specnew, wave, wnew)
         #rebnew = medfilt(specnew, kernel_size=kern)[::kern]
         #rebnew[rebnew < 1e-6] = 0.
+
         rebnew = degrade_spec(spot, wave, wnew)
         #plt.plot(spot)
         #plt.plot(star)
@@ -715,7 +730,7 @@ def compare_contrast_spectra(tstar, loggstar, tspot):
     #starflux = fits.open(modelsfolder + 'lte0' + str(tstar) \
     #            + '-' + '{:3.2f}'.format(loggstar) \
     #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
-    wnew = np.linspace(0.6, 5.3, 1000)
+    wnew = np.linspace(0.6, 5.3, 100)
     #wnew = wl*1e-4
     starflux = degrade_spec(starflux, wl, wnew)
     #wl = wl[::100]

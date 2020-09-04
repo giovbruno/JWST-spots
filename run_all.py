@@ -10,7 +10,8 @@ from pdb import set_trace
 #plt.ioff()
 
 def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
-        operation, models, res=10, fittype='grid', mcmc=False):
+        operation, models, res=10, fittype='grid', mcmc=False, \
+        spotted_starmodel=True):
 
     # Folders & files
     pardict = {}
@@ -39,15 +40,17 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     pardict['logfile_chains'] = pardict['chains_folder'] + 'logfile.log'
     #pardict['flag'] = [1.90, 1.97]        # Time intervals for normalization
 
+    pardict['spotted_starmodel'] = spotted_starmodel
     pardict['magstar'] = magstar
     pardict['rstar'] = rstar
     pardict['tstar'] = tstar
     pardict['tumbra'] = tumbra
     pardict['tpenumbra'] = tpenumbra
+    pardict['aumbra'] = 3. # in degrees
     pardict['loggstar'] = loggstar
     pardict['rplanet'] = rplanet
-    pardict['pplanet'] = 2. # K star
-    #pardict['pplanet'] = 5. # M star
+    pardict['pplanet'] = 2. # K, M star
+
     pardict['planettype'] = 'constant'
     if instr == 'NIRSpec_Prism':
         pardict['pandexo_out_jwst'] = pardict['data_folder'] + 'singlerun_1transit.p'
@@ -82,7 +85,8 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     # Run process for JWST
     if 'simulate_transits' in operation:
         if instr == 'NIRSpec_Prism':
-            #simulate_transit.generate_spectrum_jwst(pardict)
+            if pardict['spotted_starmodel']:
+                simulate_transit.generate_spectrum_jwst(pardict)
             totchan = simulate_transit.add_spots(pardict, 'jwst', resol=res, \
                     models=models)
         elif instr == 'NIRCam':
@@ -125,7 +129,8 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
 
 def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
-            models=['phoenix'], res=10, fittype='grid', mcmc=False):
+            models=['phoenix'], res=10, fittype='grid', mcmc=False, \
+            spotted_starmodel=True):
     '''
     Run the simulations for several scenarios.
 
@@ -171,7 +176,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                             ip['tstar'] + td , ip['tpenumbra'], \
                             ip['loggstar'], ip['rstar'], \
                             ip['instrument'], opers, models, res=res, \
-                            fittype=fittype, mcmc=mcmc)
+                            fittype=fittype, mcmc=mcmc, \
+                            spotted_starmodel=spotted_starmodel)
 
     #map_uncertainties(mags, tcontrast, ip)
     plot_res(ip, mags, tcontrast, models, fittype)
@@ -224,7 +230,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
                     print(resdict[mag]['Tunc'])
                 except FileNotFoundError:
                     tdiff_output[i, j] = -999
-            tdiff_unc[i] = np.mean(uncT)
+            tdiff_unc[i] = np.median(uncT)
 
         #fig1 = plt.figure(1, figsize=(9, 7))
         #frame2 = fig1.add_axes((.1,.1,.8,.2))
@@ -298,7 +304,7 @@ def plot_unc_results(instrument):
         plt.plot(ff[0], ff[1], 'o-', label=str(ti) + ' K', color=colr[i])
     plt.legend(frameon=False, fontsize=12)
     plt.xlabel('K mag', fontsize=16)
-    plt.ylabel(r'$\Delta T_\bullet$ [K]', fontsize=16)
+    plt.ylabel(r'$\sigma(T_\bullet)$ [K]', fontsize=16)
     plt.title(instrument, fontsize=16)
     plt.show()
     plt.savefig(homedir + '/Dropbox/Projects/jwst_spots/' + instrument \
