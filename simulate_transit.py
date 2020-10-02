@@ -16,10 +16,9 @@ import rebin
 import pickle
 import os
 from astropy.io import fits
-sys.path.append('/home/giovanni/Dropbox/Projects/granulation/detect_LD_variations/code/Light-curve-tools/')
+sys.path.append('/home/giovanni/Projects/granulation/detect_LD_variations/code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
-from spectra_fit import degrade_spec
 from pdb import set_trace
 
 modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
@@ -554,3 +553,23 @@ def spotted_transmsp(wtransnm, ytransm, tstar, loggstar, tspot, loggspot, \
     newtransm = ytransm/(1. - delta*(1. - spot/star))
 
     return newtransm
+
+def degrade_spec(spec, oldwl, newwl):
+    '''
+    Use provided new wavelength to degrade spectrum.
+    '''
+
+    newspec = np.zeros(len(newwl))
+    dwl = np.diff(newwl)
+    for j, wli in enumerate(newwl):
+        #if j == 0:
+        #    wl1, wl2 = wli - dwl[0], wli + dwl[0]
+        if j == len(newwl) - 1:
+            wl1, wl2 = wli - 0.5*dwl[-1], wli + 0.5*dwl[-1]
+        else:
+            wl1, wl2 = wli - 0.5*dwl[j], wli + 0.5*dwl[j]
+        flag = np.logical_and(oldwl/1e4 >= wl1, oldwl/1e4 < wl2)
+        #flag = np.logical_and(oldwl >= wl1, oldwl < wl2)
+        newspec[j] = np.mean(spec[flag])
+
+    return newspec

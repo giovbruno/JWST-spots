@@ -18,12 +18,13 @@ from pdb import set_trace
 from astropy.io import fits
 from astropy.modeling import blackbody as bb
 import cornerplot
+from simulate_transit import degrade_spec
 import emcee
-from pysynphot import observation
-from pysynphot import spectrum
+from pysynphot import observation, spectrum, Icat
 
 modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
 foldthrough = '/home/giovanni/Dropbox/Shelf/filters/'
+intensfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/SpecInt/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
@@ -188,10 +189,10 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         dict_results[pm] = {}
         dict_results[pm][stmod] = {}
         if pardict['tstar'] == 3500:
-            tspot_ = np.arange(2300, pardict['tstar'] - 50, 25)
+            tspot_ = np.arange(2300, pardict['tstar'] - 50, 200)
             #tspot_ = np.array([2700, 3100])
         else:
-            tspot_ = np.arange(3300, pardict['tstar'] - 50, 25)
+            tspot_ = np.arange(3300, pardict['tstar'] - 50, 200)
             #tspot_ = np.array([3500, 3900])#, 4100])
         tspot_ = tspot_[tspot_ != pardict['tstar']]
         likelihood = np.zeros(len(tspot_)) + np.inf
@@ -232,7 +233,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
                 #elif pardict['instrument'] == 'NIRSpec_Prism/':
                 #    flagf = np.logical_or(ww < 3.0, ww > 4.2)
                 #soln.x[0] = 1
-                plt.plot(wl, specA + soln.x[0], label=str(temp), alpha=.5)
+                plt.plot(wl, specA + soln.x[0], label=str(int(temp)) + ' K')
                 #plt.plot(wl, A - specA - soln.x[0], label=str(temp), alpha=.5)
                 #plt.ylim(0, 2)
                 chi2 = np.sum((A - specA - soln.x[0])**2 \
@@ -297,7 +298,8 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
 
         #plt.legend(frameon=False, loc='best', fontsize=16)
         plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
-        plt.ylabel('Relative flux rise', fontsize=16)
+        plt.ylabel(r'Relative flux rise $\Delta f(\lambda)/\Delta f(\lambda_0)$', \
+                    fontsize=16)
         #chi2min = np.argmin(chi2)
         maxL = np.argmax(likelihood)
         #print('chi2 min =', chi2[chi2min], 'with Tspot =', \
@@ -313,6 +315,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         #plt.ylim(0., 6000)
         plt.legend(frameon=False, loc='upper right')
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
+        set_trace()
         plt.close('all')
 
     plt.figure()
@@ -559,26 +562,6 @@ def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
     return wnew[~flag], rise[~flag]
     #return wave, 1. - spot/star
 
-def degrade_spec(spec, oldwl, newwl):
-    '''
-    Use provided new wavelength to degrade spectrum.
-    '''
-
-    newspec = np.zeros(len(newwl))
-    dwl = np.diff(newwl)
-    for j, wli in enumerate(newwl):
-        #if j == 0:
-        #    wl1, wl2 = wli - dwl[0], wli + dwl[0]
-        if j == len(newwl) - 1:
-            wl1, wl2 = wli - 0.5*dwl[-1], wli + 0.5*dwl[-1]
-        else:
-            wl1, wl2 = wli - 0.5*dwl[j], wli + 0.5*dwl[j]
-        flag = np.logical_and(oldwl/1e4 >= wl1, oldwl/1e4 < wl2)
-        #flag = np.logical_and(oldwl >= wl1, oldwl < wl2)
-        newspec[j] = np.mean(spec[flag])
-
-    return newspec
-
 def plot_precision(pardict, xaxis, deltapar):
     '''
     Plot starspot parameter precision as a function of some simulation
@@ -647,7 +630,7 @@ def spectrum_var(res=100000):
     '''
 
     wout = np.arange(0.55, 5.5, 0.001)
-    fplanet = '/home/giovanni/Dropbox/Projects/jwst_spots/NIRSpec_Prism/1000K_jupiter.pickle'
+    fplanet = '/home/giovanni/Projects/jwst_spots/NIRSpec_Prism/1000K_jupiter.pickle'
     planet = pickle.load(open(fplanet, 'rb'))
     w = planet['OriginalInput']['model_wave']
     D = planet['OriginalInput']['model_spec']*1e6
@@ -760,11 +743,11 @@ def compare_contrast_spectra(tstar, loggstar, tspot):
     plt.xlim(0.6, 5.2)
     plt.ylim(-0.1, 1.1)
     plt.xlabel(r'Wavelength [$\mu$m]', fontsize=14)
-    plt.ylabel(r'Brightness contrast ($A_\lambda$)', fontsize=14)
+    plt.ylabel(r'Brightness contrast at $\mu=1$ ($A_\lambda$)', fontsize=14)
     plt.title('$T_\star=$ ' + str(tstar) + ' K', fontsize=16)
     plt.legend(frameon=False)
     plt.show()
-    plt.savefig('/home/giovanni/Dropbox/Projects/jwst_spots/contrast_model_' \
+    plt.savefig('/home/giovanni/Projects/jwst_spots/contrast_model_' \
                 + str(tstar) + '.pdf')
     return
 
@@ -793,3 +776,64 @@ def loglike(cube, ndim, nparams):
     model = combine_spectra(pardict, [cube[0]], 0.05, stmod, wl, \
                 res=res, isplot=False)
     loglikelihood=-0.5*np.sum((y_meas-y_binned)**2/err**2)
+
+def compare_intens_integrated(res):
+    '''
+    Compare specific intensity contrast spectra and integrated flux spectra
+    at a given resolution.
+    '''
+
+    eespot = fits.open(intensfolder \
+                + 'lte04300-4.00-0.0.PHOENIX-ACES-AGSS-COND-SPECINT-2011.fits')
+    eestar = fits.open(intensfolder \
+                + 'lte05100-4.00-0.0.PHOENIX-ACES-AGSS-COND-SPECINT-2011.fits')
+    wl = np.array([eestar[0].header['CRVAL1'] + (eestar[0].header['CDELT1']*i) \
+                for i in np.arange(eestar[0].header['NAXIS1'])])
+    ffspot = Icat('phoenix', 4300, 0.0, 4.0)
+    ffstar = Icat('phoenix', 5100, 0.0, 4.5)
+    wave = ffspot.wave
+    flag = np.logical_and(wave > 500, wave < 25999)
+    ffspot = ffspot.flux[flag]
+    ffstar = ffstar.flux[flag]
+    wave = wave[flag]
+
+    wnew = wlres(0.6, 2.6, res)
+    contrflux = ffspot/ffstar
+    contrflux_wavenew = degrade_spec(contrflux, wave, wnew)
+    mu = [-1, -10, -11, -13, -15, -20]
+
+    for j in mu[::-1]:
+        intens_spot = eespot[0].data[j, :]
+        intens_star = eestar[0].data[j, :]
+        contr = intens_spot/intens_star
+        contr_mod = interp1d(wl, contr)
+        contr_wave = contr_mod(wave)
+        contr_wavenew = degrade_spec(contr_wave, wave, wnew)
+        flag = np.logical_or(np.isnan(contr_wavenew), np.isnan(contrflux_wavenew))
+
+        plt.plot(wnew[~flag], \
+                (contr_wavenew[~flag]/contrflux_wavenew[~flag] - 1.)*100., \
+                label=np.round(np.degrees(np.arccos(eespot[1].data[j])), \
+                                    1), alpha=0.4)
+    plt.plot([0., 2.6], [5, 5], 'k--')
+    plt.plot([0., 2.6], [-5, -5], 'k--')
+    plt.legend(title=r'$\theta$ [deg]')
+    #plt.ylim(-50, 100)
+    plt.xlim(0.6, 2.6)
+    plt.ylabel(r'$\Delta$ contrast [%]', fontsize=14)
+    plt.xlabel(r'Wavelength [$\mu$m]', fontsize=14)
+    plt.show()
+    plt.savefig('/home/giovanni/Projects/jwst_spots/specint_vs_flux.pdf')
+
+    return
+
+def wlres(wli, wlf, res):
+    '''
+    Build a wl array with a given resolution.
+    '''
+    wl = []
+    wl.append(wli)
+    while wl[-1] < wlf:
+        wl.append(wl[-1] + wl[-1]/res)
+
+    return np.array(wl)
