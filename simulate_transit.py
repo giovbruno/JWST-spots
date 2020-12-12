@@ -2,7 +2,7 @@
 # spot occultations.
 
 import sys
-#sys.path.append('/home/giovanni/Dropbox/Shelf/python/pandexo/')
+#sys.path.append('/home/giovanni/Shelf/python/pandexo/')
 import warnings
 warnings.filterwarnings('ignore')
 import pandexo.engine.justdoit as jdi # THIS IS THE HOLY GRAIL OF PANDEXO
@@ -21,8 +21,8 @@ import ld_coeffs
 from astropy.convolution import convolve
 from pdb import set_trace
 
-modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
-foldthrough = '/home/giovanni/Dropbox/Shelf/filters/'
+modelsfolder = '/home/giovanni/Shelf/stellar_models/phxinten/HiRes/'
+foldthrough = '/home/giovanni/Shelf/filters/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
@@ -242,13 +242,13 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
                 wl_bin_up = xobs[i] + np.diff(xobs)[i - 1]/2.
             if ldendname == 'prism':
                 thrfile \
-                = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRSpec.CLEAR.dat'
+                = '/home/giovanni/Shelf/filters/JWST_NIRSpec.CLEAR.dat'
             elif ldendname == 'nircam' and xobs[i] < 2.4:
                 thrfile \
-                = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F150W2.dat'
+                = '/home/giovanni/Shelf/filters/JWST_NIRCam.F150W2.dat'
             elif ldendname == 'nircam' and xobs[i] >= 2.4:
                 thrfile \
-                = '/home/giovanni/Dropbox/Shelf/filters/JWST_NIRCam.F322W2.dat'
+                = '/home/giovanni/Shelf/filters/JWST_NIRCam.F322W2.dat'
             ww_, LDcoeffs_ = ld_coeffs.fit_law(pardict['tstar'], \
                 pardict['loggstar'], 0.0, thrfile=thrfile, grid='phoenix', \
                 wlmin=wl_bin_low, wlmax=wl_bin_up, nchannels=1, plots=False)

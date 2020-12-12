@@ -22,9 +22,9 @@ from simulate_transit import degrade_spec
 import emcee
 from pysynphot import observation, spectrum, Icat
 
-modelsfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/HiRes/'
-foldthrough = '/home/giovanni/Dropbox/Shelf/filters/'
-intensfolder = '/home/giovanni/Dropbox/Shelf/stellar_models/phxinten/SpecInt/'
+modelsfolder = '/home/giovanni/Shelf/stellar_models/phxinten/HiRes/'
+foldthrough = '/home/giovanni/Shelf/filters/'
+intensfolder = '/home/giovanni/Shelf/stellar_models/phxinten/SpecInt/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'

@@ -16,7 +16,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     # Folders & files
     pardict = {}
     pardict['homedir'] = os.path.expanduser('~')
-    pardict['project_folder'] = pardict['homedir'] + '/Dropbox/Projects/jwst_spots/'
+    pardict['project_folder'] = pardict['homedir'] + '/Projects/jwst_spots/'
     pardict['instrument'] = str(instr) + '/'
     if not os.path.exists(pardict['project_folder'] + pardict['instrument']):
         os.mkdir(pardict['project_folder'] + pardict['instrument'])
@@ -64,7 +64,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
             + '_0.0_tophat_30ch_nonlinear_kurucz.txt'
     elif instr == 'NIRCam':
         pardict['pandexo_out_jwst'] = \
-        '/home/giovanni/Dropbox/Projects/jwst_spots/NIRCam/star_5000K/PandExo_F322W2_k3.5.pic'
+        '/home/giovanni/Projects/jwst_spots/NIRCam/star_5000K/PandExo_F322W2_k3.5.pic'
         pardict['ldfile_quadratic_blue'] = pardict['project_folder'] \
             + 'ldfiles/' + str(int(pardict['tstar'])) + '_' \
             + str(np.round(pardict['loggstar'], 1)) \
@@ -203,7 +203,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
             for j, td in enumerate(tcontrast):
                 tumbra = ip['tstar'] + tcontrast
                 homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Dropbox/Projects/jwst_spots/'
+                project_folder = homedir + '/Projects/jwst_spots/'
                 instrument = ip['instrument'] + '/'
                 chains_folder = project_folder + instrument + 'star_' \
                     + str(int(ip['tstar'])) + 'K/p' \
@@ -270,7 +270,7 @@ def map_uncertainties(mags, tcontrast, ip):
     unc = []
     for mag in mags:
         homedir = os.path.expanduser('~')
-        project_folder = homedir + '/Dropbox/Projects/jwst_spots/'
+        project_folder = homedir + '/Projects/jwst_spots/'
         instrument = ip['instrument'] + '/'
         data_folder = project_folder + instrument + 'star_' \
             + str(int(ip['tstar'])) + 'K/p' \
@@ -298,7 +298,7 @@ def plot_unc_results(instrument):
     colr = ['orange', 'royalblue']
     tspot = [3500, 5000]
     for i, ti in enumerate(tspot):
-        filres = homedir + '/Dropbox/Projects/jwst_spots/' + instrument \
+        filres = homedir + '/Projects/jwst_spots/' + instrument \
                 + '/star_' + str(ti) + 'K/uncertainty_array.pic'
         ff = pickle.load(open(filres, 'rb'))
         plt.plot(ff[0], ff[1], 'o-', label=str(ti) + ' K', color=colr[i])
@@ -307,7 +307,7 @@ def plot_unc_results(instrument):
     plt.ylabel(r'$\sigma(T_\bullet)$ [K]', fontsize=16)
     plt.title(instrument, fontsize=16)
     plt.show()
-    plt.savefig(homedir + '/Dropbox/Projects/jwst_spots/' + instrument \
+    plt.savefig(homedir + '/Projects/jwst_spots/' + instrument \
                 + '/result_uncertainties_' + instrument + '.pdf')
 
     return
