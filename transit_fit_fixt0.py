@@ -4,10 +4,11 @@ from pdb import set_trace
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares, leastsq, basinhopping
 from scipy.optimize._numdiff import approx_derivative
-import emcee
 import os, sys, pickle, glob, logging, pathlib
 from astropy.io import fits
-from emcee.autocorr import integrated_time
+sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
+import emcee
+from autocorr import integrated_time
 import simulate_transit
 #from pytransit import QuadraticModel
 import batman
@@ -16,6 +17,7 @@ from text_operations import printlog
 import cornerplot
 import get_uncertainties
 import lmfit
+plt.ioff()
 
 #from spotmodel_twotransits import gauss
 #per_planet = 2.*np.random.normal(loc=1., scale=1e-4)
@@ -293,7 +295,7 @@ def transit_emcee(diz, ind, mcmc):
         if np.sum(p0[:, -1] < 0) > 0:
             p0[:, -1][p0[:, -1] <= 0] = abs(p0[:, -1][p0[:, -1] <= 0])
 
-        nsteps = 150
+        nsteps = 200
         width = 30
 
         for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
@@ -305,7 +307,7 @@ def transit_emcee(diz, ind, mcmc):
 
         # Now, restart the exploration
         print("Running production...")
-        nsteps = 400
+        nsteps = 500
         width = 30
         for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
             n = int((width+1) * float(i) / nsteps)
@@ -326,12 +328,13 @@ def transit_emcee(diz, ind, mcmc):
         #samples = samples[isfin, :]
         best_sol = samples[lnL.argmax()]
         try:
-            acor_time = emcee.autocorr.integrated_time(samples, c=10)
+            acor_time = integrated_time(samples, c=10)
             acor_multiples = np.shape(samples)[0]/acor_time
             print('Length chains:', np.shape(samples)[0])
             print('Autocorrelation multiples:', acor_multiples)
-        except emcee.autocorr.AutocorrError as e:
-            print(str(e))
+        except:
+            print('Too short chain')
+            pass
 
         print("Mean acceptance fraction: {0:.3f}"
                     .format(np.mean(sampler.acceptance_fraction)))
@@ -500,7 +503,7 @@ def plot_best_white(sol, t, y, yerr, datasav, \
     frame2.set_ylabel('Residuals [ppm]', fontsize=16)
     frame2.set_xlabel('Time [days]', fontsize=16)
     plt.title('Joint transit-starspot fit', fontsize=18)
-    plt.show()
+    #plt.show()
     plt.savefig(plotname)
     #infocontent(t, y, yerr, initial_err, jac, namentropyf, logger)
     #set_trace()
@@ -614,7 +617,7 @@ def clean_bands(diz, wl_sol, residuals, wm):
 
     plt.xlabel('Time [days]', fontsize = 18)
     plt.ylabel('Flux', fontsize = 18)
-    plt.show()
+    #plt.show()
     set_trace()
 
     return residuals
@@ -762,7 +765,7 @@ def analyze_chains(soln, sampler, chains_folder_ch, t, t0, aR, i, ld, y, yerr, b
 
     # Autocorrelation time
     try:
-        acor_time = emcee.autocorr.integrated_time(samples, c = 10)
+        acor_time = integrated_time(samples, c = 10)
         acor_multiples = np.shape(samples)[0]/acor_time
         print('Length chains:', np.shape(samples)[0])
         print('Autocorrelation multiples:', acor_multiples)
@@ -892,13 +895,13 @@ def plot_channels():
     #ax.set_xlabel('ll')
     fig.text(0.5, 0.05, 'Orbital phase', ha='center', va='center', fontsize = 18)
     fig.text(0.5, 0.94, 'Spot masked', ha='center', va='center', fontsize = 20)
-    plt.show()
-    set_trace()
+    #plt.show()
+    #set_trace()
     plt.close('all')
     reshist = np.concatenate((build_histo))
     #plt.hist(reshist, alpha = 0.5, bins = 20)
     plt.title('Residuals', fontsize = 1)
-    plt.show()
+    #plt.show()
     #set_trace()
     fout = open(chains_folder + 'residuals.pic', 'wb')
     pickle.dump(np.concatenate((build_histo)), fout)
@@ -1107,7 +1110,7 @@ def bell(x, par):
     fun = A * 1./(((1. + abs(x - x0))/b)**(2*c))
     plt.figure()
     plt.plot(x, fun)
-    plt.show()
+    #plt.show()
     set_trace()
     return fun
 

@@ -9,14 +9,15 @@ import matplotlib.pyplot as plt
 from pdb import set_trace
 #plt.ioff()
 
-def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
-        operation, models, res=10, fittype='grid', mcmc=False, \
+def go(magstar, rplanet, tstar, tumbra, tpenumbra, aumbra, loggstar, rstar, \
+        instr, operation, models, res=10, fittype='grid', mcmc=False, \
         spotted_starmodel=True):
 
     # Folders & files
     pardict = {}
     pardict['homedir'] = os.path.expanduser('~')
-    pardict['project_folder'] = pardict['homedir'] + '/Projects/jwst_spots/'
+    pardict['project_folder'] = pardict['homedir'] \
+                                            + '/Projects/jwst_spots/revision1/'
     pardict['instrument'] = str(instr) + '/'
     if not os.path.exists(pardict['project_folder'] + pardict['instrument']):
         os.mkdir(pardict['project_folder'] + pardict['instrument'])
@@ -25,7 +26,8 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
             + str(np.round(rplanet, 4)) \
             + '_star' + str(rstar) + '_' + str(int(tstar)) + '_' \
             + str(loggstar) + '_spot' + str(int(tumbra)) + '_' \
-            + str(int(tpenumbra)) + '_mag' + str(magstar) + '/'
+            + str(int(tpenumbra)) + '_a' + str(int(aumbra)) \
+            + '_mag' + str(magstar) + '/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -46,7 +48,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
     pardict['tstar'] = tstar
     pardict['tumbra'] = tumbra
     pardict['tpenumbra'] = tpenumbra
-    pardict['aumbra'] = 3. # in degrees
+    pardict['aumbra'] = aumbra # in degrees
     pardict['loggstar'] = loggstar
     pardict['rplanet'] = rplanet
     pardict['pplanet'] = 2. # K, M star
@@ -127,7 +129,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, loggstar, rstar, instr, \
 
     return pardict
 
-def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
+def cycle(rplanet, rstar, tstar, aumbra, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
             models=['phoenix'], res=10, fittype='grid', mcmc=False, \
             spotted_starmodel=True):
@@ -148,13 +150,13 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['tstar'] = tstar #5000
     ip['loggstar'] = loggstar #4.5
     ip['tpenumbra'] = 5500
+    ip['aumbra'] = aumbra
     #ip['instrument'] = 'NIRSpec_Prism'
     ip['instrument'] = instrum
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        #mags = [14.5]
     if tstar == 5000:
         tcontrast = np.arange(-1500, 0, 200) #for 5000 K
         #tcontrast = np.array([-300])
@@ -173,14 +175,14 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         for mag in mags:
             for td in tcontrast:
                 pardict = go(mag, ip['rplanet'], ip['tstar'], \
-                            ip['tstar'] + td , ip['tpenumbra'], \
+                            ip['tstar'] + td , ip['tpenumbra'], ip['aumbra'], \
                             ip['loggstar'], ip['rstar'], \
                             ip['instrument'], opers, models, res=res, \
                             fittype=fittype, mcmc=mcmc, \
                             spotted_starmodel=spotted_starmodel)
 
     #map_uncertainties(mags, tcontrast, ip)
-    plot_res(ip, mags, tcontrast, models, fittype)
+    #plot_res(ip, mags, tcontrast, models, fittype)
 
     return
 
@@ -309,5 +311,23 @@ def plot_unc_results(instrument):
     plt.show()
     plt.savefig(homedir + '/Projects/jwst_spots/' + instrument \
                 + '/result_uncertainties_' + instrument + '.pdf')
+
+    return
+
+def launch():
+
+    cycle(0.3, 0.3, 3500, 5., 5.0, 'NIRCam', \
+     simulate_transits=True, fit_transits=True, fit_spectra=True, \
+     spotted_starmodel=True, mcmc=True)
+
+    cycle(0.3, 0.3, 3500, 1., 5.0, 'NIRSpec_Prism', \
+     simulate_transits=True, fit_transits=True, fit_spectra=True, \
+     spotted_starmodel=True, mcmc=True)
+    cycle(0.3, 0.3, 3500, 2., 5.0, 'NIRSpec_Prism', \
+     simulate_transits=True, fit_transits=True, fit_spectra=True, \
+     spotted_starmodel=True, mcmc=True)
+    cycle(0.3, 0.3, 3500, 5., 5.0, 'NIRSpec_Prism', \
+     simulate_transits=True, fit_transits=True, fit_spectra=True, \
+     spotted_starmodel=True, mcmc=True)
 
     return

@@ -20,7 +20,7 @@ from astropy.modeling import blackbody as bb
 import cornerplot
 from simulate_transit import degrade_spec
 import emcee
-from pysynphot import observation, spectrum, Icat
+from pysynphot import Icat
 
 modelsfolder = '/home/giovanni/Shelf/stellar_models/phxinten/HiRes/'
 foldthrough = '/home/giovanni/Shelf/filters/'
@@ -128,6 +128,7 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         #           wl < 3.0), wl > 4.2))
         #flag = np.logical_or(wl < 3.2, wl > 4.2)
         flag = wl < 6.
+
     flag[1] = False
     wl = wl[flag]
     A = np.array(A)[flag]
@@ -315,7 +316,6 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
         #plt.ylim(0., 6000)
         plt.legend(frameon=False, loc='upper right')
         plt.savefig(plotname + stmod + '_' + instrument + '.pdf')
-        set_trace()
         plt.close('all')
 
     plt.figure()

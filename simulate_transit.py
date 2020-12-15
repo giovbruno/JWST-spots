@@ -2,7 +2,7 @@
 # spot occultations.
 
 import sys
-#sys.path.append('/home/giovanni/Shelf/python/pandexo/')
+sys.path.append('/home/giovanni/Shelf/python/pandexo/')
 import warnings
 warnings.filterwarnings('ignore')
 import pandexo.engine.justdoit as jdi # THIS IS THE HOLY GRAIL OF PANDEXO
@@ -16,7 +16,7 @@ import rebin
 import pickle
 import os
 from astropy.io import fits
-sys.path.append('/home/giovanni/Projects/granulation/detect_LD_variations/code/Light-curve-tools/')
+sys.path.append('/home/giovanni/Projects/ld_variations/code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
 from pdb import set_trace
