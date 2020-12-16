@@ -67,8 +67,11 @@ def read_res(pardict, instrument, plotname, resfile, models, fittype='grid', \
             ffopen = open(pardict['chains_folder'] + 'chains_' \
                     + str(i) + '.pickle', 'rb')
             res = pickle.load(ffopen)
-            perc = res['Percentiles'][0][-2]
             wl.append(res['wl'])
+            if i == 0:
+                perc = res['Percentiles'][0][-2]
+            else:
+                perc = res['Percentiles'][0][-3]
             A.append(perc[2])
             yerrup.append(perc[3] - perc[2])
             yerrdown.append(perc[2] - perc[1])

@@ -1,6 +1,6 @@
 import numpy as np
 import simulate_transit
-import transit_fit_fixt0 as transit_fit
+import transit_fit# as transit_fit
 import spectra_fit
 import os
 import pathlib
@@ -10,7 +10,7 @@ from pdb import set_trace
 #plt.ioff()
 
 def go(magstar, rplanet, tstar, tumbra, tpenumbra, aumbra, loggstar, rstar, \
-        instr, operation, models, res=10, fittype='grid', mcmc=False, \
+        instr, operation, models, res=10, fittype='grid', \
         spotted_starmodel=True):
 
     # Folders & files
@@ -110,15 +110,13 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, aumbra, loggstar, rstar, \
 
     # Select channels and fit transit + spots
     if 'fit_transits' in operation:
-        transit_fit.transit_spectro(pardict, 'jwst', resol=res, mcmc=mcmc)
+        transit_fit.transit_spectro(pardict, 'jwst', resol=res)
     # Fit derived transit depth rise with stellar models
-    #try:
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, 'jwst', pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, fittype=fittype, mcmc=mcmc)
-    #except FileNotFoundError:
-    #    pass
+          models, resol=res, fittype=fittype)
+
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
     #simulate_transit.add_spots(pardict, 'hst')
@@ -131,7 +129,7 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, aumbra, loggstar, rstar, \
 
 def cycle(rplanet, rstar, tstar, aumbra, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
-            models=['phoenix'], res=10, fittype='grid', mcmc=False, \
+            models=['phoenix'], res=10, fittype='grid', \
             spotted_starmodel=True):
     '''
     Run the simulations for several scenarios.
@@ -178,7 +176,7 @@ def cycle(rplanet, rstar, tstar, aumbra, loggstar, instrum, mags=[4.5], \
                             ip['tstar'] + td , ip['tpenumbra'], ip['aumbra'], \
                             ip['loggstar'], ip['rstar'], \
                             ip['instrument'], opers, models, res=res, \
-                            fittype=fittype, mcmc=mcmc, \
+                            fittype=fittype, \
                             spotted_starmodel=spotted_starmodel)
 
     #map_uncertainties(mags, tcontrast, ip)
@@ -318,16 +316,15 @@ def launch():
 
     cycle(0.3, 0.3, 3500, 5., 5.0, 'NIRCam', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
-     spotted_starmodel=True, mcmc=True)
-
+     spotted_starmodel=True)
     cycle(0.3, 0.3, 3500, 1., 5.0, 'NIRSpec_Prism', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
-     spotted_starmodel=True, mcmc=True)
+     spotted_starmodel=True)
     cycle(0.3, 0.3, 3500, 2., 5.0, 'NIRSpec_Prism', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
-     spotted_starmodel=True, mcmc=True)
+     spotted_starmodel=True)
     cycle(0.3, 0.3, 3500, 5., 5.0, 'NIRSpec_Prism', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
-     spotted_starmodel=True, mcmc=True)
+     spotted_starmodel=True)
 
     return
