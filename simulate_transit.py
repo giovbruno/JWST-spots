@@ -170,7 +170,7 @@ def read_pandexo_results(pardict, instrument, res=4):
     plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
     plt.ylabel('Transit depth', fontsize=16)
     plt.title('Transmission spectrum output from PandExo', fontsize=16)
-    plt.show()
+    #plt.show()
     plt.savefig(pardict['data_folder'] + 'spec_model_' + instrument + '.pdf')
     plt.close('all')
 
@@ -266,22 +266,9 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
                         + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
     ldlist = pickle.load(ldd)[0]
     ldd.close()
-    #flag = xobs < 3.
-    #xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
+
     sys.path.append('../KSint_wrapper/SRC/')
     import ksint_wrapper_fitcontrast
-
-    # Add "white" light curve term
-    # If spectrum computed with PandExo
-    #floor = spec_obs['error_w_floor']
-
-    #yobs_white = np.average(yobs, weights=1./(np.array(yobs_err)**2))
-    #relsigma = np.concatenate((yobs, [yobs_white]))
-    #relsigma_white = np.average(yobs, \
-    #                weights=1./(yobs_err**2))#/(len(yobs)**0.5)
-    #relsigma = np.concatenate((yobs_err, [relsigma_white]))
-    #relsigma = yobs_err
-    #yerr_white = np.mean(yobs_err)/len(yobs)**0.5
     '''
     if pardict['instrument'] == 'NIRSpec_Prism/':
         wlowblue, wupblue, uablue, ubblue \
@@ -341,9 +328,6 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
         params[2], params[3] = ldlist[i][0], ldlist[i][1]
         if pardict['tstar'] == 3500 or pardict['tstar'] == 5000:
             params[4], params[5] = 260, pardict['aumbra']  # M
-        #elif pardict['tstar'] == 5000:
-        #    params[4], params[5] = 250, 3. # K ??
-        # Contrast
         if not pardict['spotted_starmodel']:
             modstar = pysynphot.Icat(models[0], pardict['tstar'], 0.0, \
                             pardict['loggstar'])
@@ -372,31 +356,17 @@ def add_spots(pardict, instrument, resol=10, simultr=None, models=['phoenix']):
 
         # Throughput on models
         if pardict['instrument'] == 'NIRCam/':
-            wth1, fth1 = np.loadtxt(thrfile1, unpack=True)#, skiprows=2)
-            wth2, fth2 = np.loadtxt(thrfile2, unpack=True)#, skiprows=2)
-            wth3, fth3 = np.loadtxt(thrfile3, unpack=True)#, skiprows=2)
+            wth1, fth1 = np.loadtxt(thrfile1, unpack=True)
+            wth2, fth2 = np.loadtxt(thrfile2, unpack=True)
+            wth3, fth3 = np.loadtxt(thrfile3, unpack=True)
             wth = np.concatenate((wth1, wth2, wth3))
             fth = np.concatenate((fth1, fth2, fth3))
-            #plt.plot(wl, starm)
-            #plt.plot(wl, umbram)
         elif pardict['instrument'] == 'NIRSpec_Prism/':
             wth, fth = np.loadtxt(thrfile4, unpack=True)
             wth*= 1e4
         starm = integ_filter(wth, fth, wl, starm)
         umbram = integ_filter(wth, fth, wl, umbram)
-            #plt.plot(wl, starm)
-            #plt.plot(wl, umbram)
-        #wl = fits.open(modelsfolder \
-        #            +'WAVE_PHOENIX-ACES-AGSS-COND-2011.fits')[0].data
-        #starm = fits.open(modelsfolder + 'lte0' + str(int(pardict['tstar'])) \
-        #            + '-' + '{:3.2f}'.format(pardict['loggstar']) \
-        #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
-        #umbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tumbra'])) \
-        #            + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
-        #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
-        #penumbram = fits.open(modelsfolder + 'lte0' + str(int(pardict['tpenumbra'])) \
-        #            + '-' + '{:3.2f}'.format(pardict['loggstar'] - 0.5) \
-        #            + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
+
         contrast = umbram/starm
         contrastp = penumbram/starm
 

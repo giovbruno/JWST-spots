@@ -1,11 +1,13 @@
 import numpy as np
 import simulate_transit
-import transit_fit
+import transit_fit# as transit_fit
 import spectra_fit
 import os
+import pathlib
 import pickle
 import matplotlib.pyplot as plt
 from pdb import set_trace
+#plt.ioff()
 
 def go(magstar, rplanet, tstar, tumbra, tpenumbra, aumbra, loggstar, rstar, \
         instr, operation, models, res=10, fittype='grid', \
@@ -36,6 +38,9 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, aumbra, loggstar, rstar, \
         os.mkdir(pardict['chains_folder'])
 
     #pardict['pandexo_out_hst'] = pardict['data_folder'] + 'singlerun_hst.p'
+    pardict['logfile_data'] = pardict['data_folder'] + 'logfile.log'
+    pardict['logfile_chains'] = pardict['chains_folder'] + 'logfile.log'
+    #pardict['flag'] = [1.90, 1.97]        # Time intervals for normalization
 
     pardict['spotted_starmodel'] = spotted_starmodel
     pardict['magstar'] = magstar
@@ -70,7 +75,15 @@ def go(magstar, rplanet, tstar, tumbra, tpenumbra, aumbra, loggstar, rstar, \
             + 'ldfiles/' + str(int(pardict['tstar'])) + '_' \
             + str(np.round(pardict['loggstar'], 1)) \
             + '_0.0_F322W2_15ch_quadratic_phoenix.txt'
-
+    # Check
+    ''''
+    if pathlib.Path(pardict['logfile_data']).exists() or \
+    pathlib.Path(pardict['logfile_chains']).exists():
+        print('Log file already exists. Continue?')
+        set_trace()
+        os.system('rm ' + pardict['logfile_data'])
+        os.system('rm ' + pardict['logfile_chains'])
+    '''
     # Run process for JWST
     if 'simulate_transits' in operation:
         if instr == 'NIRSpec_Prism':
@@ -128,12 +141,15 @@ def cycle(rplanet, rstar, tstar, aumbra, loggstar, instrum, mags=[4.5], \
 
     # Stellar/planet pars
     ip = {}
-    ip['rplanet'] = rplanet #1.0 for 5000 K star, 0.3 for M star
-    ip['rstar'] = rstar
-    ip['tstar'] = tstar
-    ip['loggstar'] = loggstar
+    ip['rplanet'] = rplanet #1.0 for 5000 K star
+    ip['rstar'] = rstar #1.0
+    #ip['rplanet'] = 0.3
+    #ip['rstar'] = 0.3
+    ip['tstar'] = tstar #5000
+    ip['loggstar'] = loggstar #4.5
     ip['tpenumbra'] = 5500
     ip['aumbra'] = aumbra
+    #ip['instrument'] = 'NIRSpec_Prism'
     ip['instrument'] = instrum
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
@@ -141,8 +157,10 @@ def cycle(rplanet, rstar, tstar, aumbra, loggstar, instrum, mags=[4.5], \
         mags = np.linspace(10.5, 14.5, 5)
     if tstar == 5000:
         tcontrast = np.arange(-1500, 0, 200) #for 5000 K
+        #tcontrast = np.array([-300])
     elif tstar == 3500:
         tcontrast = np.arange(-1000, 0, 200) #for 3500 K
+    #tcontrast = np.arange(-2000, 0, 400) # 6000 F star
     opers = []
     if simulate_transits:
         opers.append('simulate_transits')
@@ -151,18 +169,17 @@ def cycle(rplanet, rstar, tstar, aumbra, loggstar, instrum, mags=[4.5], \
     if fit_spectra:
         opers.append('fit_spectra')
 
-    if len(opers) > 0:
-        for mag in mags:
-            for td in tcontrast:
-                pardict = go(mag, ip['rplanet'], ip['tstar'], \
-                            ip['tstar'] + td , ip['tpenumbra'], ip['aumbra'], \
-                            ip['loggstar'], ip['rstar'], \
-                            ip['instrument'], opers, models, res=res, \
-                            fittype=fittype, \
-                            spotted_starmodel=spotted_starmodel)
+    #if len(opers) > 0:
+    #    for mag in mags:
+    #        for td in tcontrast:
+    #            pardict = go(mag, ip['rplanet'], ip['tstar'], \
+    #                        ip['tstar'] + td , ip['tpenumbra'], ip['aumbra'], \
+    #                        ip['loggstar'], ip['rstar'], \
+    #                        ip['instrument'], opers, models, res=res, \
+    #                        fittype=fittype, \
+    #                        spotted_starmodel=spotted_starmodel)
 
-    #map_uncertainties(mags, tcontrast, ip)
-    #plot_unc_results(instrum)
+    map_uncertainties(mags, tcontrast, ip)
     plot_res(ip, mags, tcontrast, models, fittype)
 
     return
@@ -179,6 +196,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
     ytdiff = tcontrast
     tdiff_output = np.zeros((len(xmag), len(ytdiff)))
     tdiff_unc = np.zeros(len(xmag))
+    #tdiff_output_abs = np.copy(tdiff_output)
     for mod in models:
         for i, mag in enumerate(mags):
             uncT = []
@@ -192,7 +210,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
                     + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
                     + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
                     + '_spot' + str(int(ip['tstar'] + td)) + '_' \
-                    + str(int(ip['tpenumbra'])) + '_a' + str(int(ip['aumbra'])) \
+                    + str(int(ip['tpenumbra'])) + '_a' + str(ip['aumbra']) \
                     + '_mag' + str(mag) + '/MCMC/'
                 try:
                     resfile = open(chains_folder + 'contrast_res_' + models[0] \
@@ -215,17 +233,20 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
                     tdiff_output[i, j] = -999
             tdiff_unc[i] = np.median(uncT)
 
+        #fig1 = plt.figure(1, figsize=(9, 7))
+        #frame2 = fig1.add_axes((.1,.1,.8,.2))
+        #frame1 = fig1.add_axes((.1,.3,.8,.6), sharex=frame2)
         plt.figure()
         plt.imshow(tdiff_output.T[::-1], extent=(min(xmag), max(xmag), \
                     ip['tstar'] + ytdiff.min(), ip['tstar'] + ytdiff.max()), \
-                    aspect='auto', vmin=0., vmax=3., \
-                    cmap=plt.get_cmap('plasma'))
-        ll = plt.colorbar()
+                    aspect='auto', vmin=0., vmax=5., \
+                    cmap=plt.get_cmap('plasma'))#interpolation='hanning')
+        ll = plt.colorbar()#ax=frame1)
         ll.set_label(r'$\Delta T_\bullet \, [\sigma]$', fontsize=16)
-        plt.xlabel('$K$ mag', fontsize=16)
+        plt.xlabel('K mag', fontsize=16)
         plt.ylabel(r'$T_\bullet$ [K]', fontsize=16)
         plt.title(str(int(ip['tstar'])) + ' K star, ' \
-                + ip['instrument'].replace('_', ' '), fontsize=16)
+                + ip['instrument'], fontsize=16)
         plt.show()
         plt.savefig(project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/accuracy_' + mod + '.pdf')
@@ -257,14 +278,14 @@ def map_uncertainties(mags, tcontrast, ip):
             + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
             + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
             + '_spot' + str(int(ip['tstar'] + tcontrast[0])) + '_' \
-            + str(int(ip['tpenumbra'])) + '_a' + str(int(ip['aumbra'])) \
+            + str(int(ip['tpenumbra'])) + '_a' + str(ip['aumbra']) \
             + '_mag' + str(mag) + '/simulated_data/'
         specmodel = pickle.load(open(data_folder \
                                         + 'spec_model_jwst.pic', 'rb'))
         unc.append(np.median(specmodel[2])*1e6)
 
     plt.plot(mags, unc, 'o-')
-    plt.xlabel('$K$ mag', fontsize=14)
+    plt.xlabel('K mag', fontsize=14)
     plt.ylabel('Median $D$ uncertainty [ppm]', fontsize=14)
     plt.show()
     plt.savefig(project_folder + instrument + 'star_' \
@@ -278,7 +299,7 @@ def plot_unc_results(instrument):
     colr = ['orange', 'royalblue']
     tspot = [3500, 5000]
     for i, ti in enumerate(tspot):
-        filres = homedir + '/Projects/revision1/jwst_spots/' + instrument \
+        filres = homedir + '/Projects/jwst_spots/' + instrument \
                 + '/star_' + str(ti) + 'K/uncertainty_array.pic'
         ff = pickle.load(open(filres, 'rb'))
         plt.plot(ff[0], ff[1], 'o-', label=str(ti) + ' K', color=colr[i])
@@ -287,23 +308,23 @@ def plot_unc_results(instrument):
     plt.ylabel(r'$\sigma(T_\bullet)$ [K]', fontsize=16)
     plt.title(instrument, fontsize=16)
     plt.show()
-    plt.savefig(homedir + '/Projects/jwst_spots/revision1/' + instrument \
+    plt.savefig(homedir + '/Projects/jwst_spots/' + instrument \
                 + '/result_uncertainties_' + instrument + '.pdf')
 
     return
 
 def launch():
 
-    cycle(0.3, 0.3, 3500, 4., 5.0, 'NIRSpec_Prism', \
+    cycle(0.3, 0.3, 3500, 5., 5.0, 'NIRCam', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
      spotted_starmodel=True)
-    cycle(0.3, 0.3, 3500, 3., 5.0, 'NIRCam', \
+    cycle(0.3, 0.3, 3500, 1., 5.0, 'NIRSpec_Prism', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
      spotted_starmodel=True)
-    cycle(1.0, 1.0, 5000, 2., 5.0, 'NIRSpec_Prism', \
+    cycle(0.3, 0.3, 3500, 2., 5.0, 'NIRSpec_Prism', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
      spotted_starmodel=True)
-    cycle(0.3, 0.3, 3500, 2., 5.0, 'NIRCam', \
+    cycle(0.3, 0.3, 3500, 5., 5.0, 'NIRSpec_Prism', \
      simulate_transits=True, fit_transits=True, fit_spectra=True, \
      spotted_starmodel=True)
 

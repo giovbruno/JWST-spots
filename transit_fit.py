@@ -28,12 +28,21 @@ def transit_spectro(pardict, instrument, resol=10):
     flag = xobs < 6
     expchan = len(xobs[flag])
 
+    # First, fit transit with the smallest error bars, to then fix the spot
+    # parameters
+    spec = pickle.load(open(pardict['data_folder'] + 'spec_model_' \
+                + instrument + '.pic', 'rb'))
+    ymoderr = spec[2]
+    bestbin = ymoderr.argmin()
+    transit_emcee(pardict, bestbin, bestbin)
+
     for i in np.arange(expchan):
-        transit_emcee(pardict, int(i))
+        if i != bestbin:
+            transit_emcee(pardict, int(i), bestbin)
 
     return
 
-def transit_emcee(diz, ind):
+def transit_emcee(diz, ind, bestbin):
 
     print('Channel', str(ind))
 
@@ -76,13 +85,14 @@ def transit_emcee(diz, ind):
     # This will set the fit or fix for tspot and spot size
     # Spot position and size are fitted only on the bluemost wavelength bin
     global modeltype
-    if ind == 0:
+    if ind == bestbin:
         modeltype = 'fitt0'
         initial_params = kr, q1, q2, r0, r1, A, wspot_, tspot_
     else:
         modeltype = 'fixt0'
         # Extract spot time from first wavelength bin
-        ffopen = open(diz['chains_folder'] + 'chains_0.pickle', 'rb')
+        ffopen = open(diz['chains_folder'] + 'chains_' + str(bestbin) \
+                    + '.pickle', 'rb')
         res = pickle.load(ffopen)
         perc = res['Percentiles'][0]
         # These will be fixed in the fit
@@ -115,7 +125,7 @@ def transit_emcee(diz, ind):
 
     # Now, MCMC starting about the optimized solution
     initial = np.array(soln.x)
-    if ind == 0:
+    if ind == bestbin:
         ndim, nwalkers = len(initial), 64
     else:
         ndim, nwalkers = len(initial), 32
@@ -173,11 +183,11 @@ def transit_emcee(diz, ind):
     plot_best(best_sol, t, y, yerr, wl, \
             diz['chains_folder'] + 'best_MCMC_' + str(ind) + '.pdf')
 
-    if wl <= 2.7 and ind == 0:
+    if wl <= 2.7 and ind == bestbin:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
                     r'$r_0$', r'$r_1$', r'$A_\mathrm{spot}$', \
                     r'$w_\mathrm{spot}$', '$t_\mathrm{spot}$']
-    elif wl <= 2.7 and ind != 0:
+    elif wl <= 2.7 and ind != bestbin:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
                     r'$r_0$', r'$r_1$', r'$A_\mathrm{spot}$']
     else:
@@ -187,8 +197,9 @@ def transit_emcee(diz, ind):
     truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
                         [None]*(len(titles) - 1)))
     ranges = [0.999]*samples.shape[1]
-    #cornerplot.cornerplot(samples, titles, truths, ranges, \
-    #        diz['chains_folder'] + '/corner_' + str(ind) + '.pdf')
+    if ind < 2 or ind == bestbin:
+        cornerplot.cornerplot(samples, titles, truths, ranges, \
+                diz['chains_folder'] + '/corner_' + str(ind) + '.pdf')
     plt.close('all')
     # Starspot size
     #size = starspot_size(diz, samples, str(ind))
