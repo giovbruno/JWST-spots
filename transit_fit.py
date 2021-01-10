@@ -11,17 +11,17 @@ import get_uncertainties
 from pdb import set_trace
 plt.ioff()
 
-def transit_spectro(pardict, instrument, resol=10):
+def transit_spectro(pardict, resol=10):
     '''
     Launches on all spectral bands
     '''
 
-    if pardict['instrument'] == 'NIRSpec_Prism/':
+    if pardict['instrument'] == 'NIRSpec_Prism':
         ldendname = 'prism'
-    elif pardict['instrument'] == 'NIRCam/':
+    elif pardict['instrument'] == 'NIRCam':
         ldendname = 'nircam'
     ldd = open(pardict['project_folder'] \
-            + pardict['instrument'] + 'star_' + str(int(pardict['tstar'])) \
+            + pardict['instrument'] + '/star_' + str(int(pardict['tstar'])) \
                         + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
     xobs = pickle.load(ldd)[1][0]
     ldd.close()
@@ -31,9 +31,10 @@ def transit_spectro(pardict, instrument, resol=10):
     # First, fit transit with the smallest error bars, to then fix the spot
     # parameters
     spec = pickle.load(open(pardict['data_folder'] + 'spec_model_' \
-                + instrument + '.pic', 'rb'))
+                + pardict['observatory'] + '.pic', 'rb'))
     ymoderr = spec[2]
     bestbin = ymoderr.argmin()
+    #bestbin = 1
     transit_emcee(pardict, bestbin, bestbin)
 
     for i in np.arange(expchan):
@@ -63,9 +64,9 @@ def transit_emcee(diz, ind, bestbin):
     global aR
     aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
     global inc
-    inc = 88.
-    global t0
-    t0 = 0.10
+    inc = 90.
+    #global t0
+    #t0 = 0.10
 
     # LM fit boundaries - fit for t0 and x0 only on the first channel
     bounds_model = []
@@ -77,17 +78,20 @@ def transit_emcee(diz, ind, bestbin):
     bounds_model.append((1e-6, 1.))          # A
     bounds_model.append((1e-3, 0.11))        # sigma
     bounds_model.append((0.08, 0.12))        # x0 = 0.1051
+    bounds_model.append((80., 90.))          # orbit inclination
+    bounds_model.append((0.08, 0.12))        # t0
 
     # Initial values
     kr, q1, q2, r0, r1 = 0.09, 0.3, 0.3, -1e-3, 1.
     A, wspot_, tspot_ = 1e-3, 0.005, 0.1
+    incl_, t0_ = 89., 0.1
 
     # This will set the fit or fix for tspot and spot size
     # Spot position and size are fitted only on the bluemost wavelength bin
     global modeltype
     if ind == bestbin:
         modeltype = 'fitt0'
-        initial_params = kr, q1, q2, r0, r1, A, wspot_, tspot_
+        initial_params = kr, q1, q2, r0, r1, A, wspot_, tspot_, incl_, t0_
     else:
         modeltype = 'fixt0'
         # Extract spot time from first wavelength bin
@@ -98,11 +102,15 @@ def transit_emcee(diz, ind, bestbin):
         # These will be fixed in the fit
         global wspot
         global tspot
-        wspot = perc[-2][2]
-        tspot = perc[-1][2]
+        global incl
+        global t0
+        wspot = perc[-4][2]
+        tspot = perc[-3][2]
+        incl = perc[-2][2]
+        t0 = perc[-1][2]
         if wl <= 2.7:
             initial_params = kr, q1, q2, r0, r1, A
-            bounds_model = bounds_model[:-2]
+            bounds_model = bounds_model[:-4]
         else:
             initial_params = kr, r0, r1, A
             temp = []
@@ -126,15 +134,16 @@ def transit_emcee(diz, ind, bestbin):
     # Now, MCMC starting about the optimized solution
     initial = np.array(soln.x)
     if ind == bestbin:
-        ndim, nwalkers = len(initial), 64
+        ndim, nwalkers = len(initial), 128
     else:
         ndim, nwalkers = len(initial), 32
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
             args=([t, y, yerr]), threads=8)
 
     # Variation around LM solution
-    p0 = initial + 0.1*(np.random.randn(nwalkers, ndim))*initial \
-                + 1e-6*(np.random.randn(nwalkers, ndim))
+    p0 = initial + 0.05*(np.random.randn(nwalkers, ndim))*initial
+                #+ 1e-6*(np.random.randn(nwalkers, ndim))
+
     # Check condition number (must be < 1e8 to maximise walker linear
     # independence). Problems might be caued by LM results = 0
     cond = np.linalg.cond(p0)
@@ -143,7 +152,7 @@ def transit_emcee(diz, ind, bestbin):
         cond = np.linalg.cond(p0)
 
     print("Running burn-in...")
-    nsteps = 250
+    nsteps = 700
     width = 30
     for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
         n = int((width+1)*float(i)/nsteps)
@@ -153,7 +162,7 @@ def transit_emcee(diz, ind, bestbin):
     sampler.reset()
 
     print("Running production...")
-    nsteps = 500
+    nsteps = 2000
     width = 30
     for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
         n = int((width+1) * float(i) / nsteps)
@@ -163,6 +172,10 @@ def transit_emcee(diz, ind, bestbin):
 
     # Merge in single chains
     samples = sampler.flatchain
+    # Inclination is symmetric wrt 90°
+    if ind == bestbin:
+        high_incl = samples[:, -2] > 90.
+        samples[high_incl, -2] -= 2.*(samples[high_incl, -2] - 90.)
     lnL = sampler.flatlnprobability
 
     best_sol = samples[lnL.argmax()]
@@ -171,6 +184,11 @@ def transit_emcee(diz, ind, bestbin):
         acor_multiples = np.shape(samples)[0]/acor_time
         print('Length chains:', np.shape(samples)[0])
         print('Autocorrelation multiples:', acor_multiples)
+        print('Integrated autocorrelation time')
+        for jpar in np.arange(np.shape(samples)[1]):
+            IAT = emcee.autocorr.integrated_time(samples[:, j])
+            print('IAT multiples for parameter', jpar, ':', \
+                                np.shape(samples)[0]/IAT)
     except:
         print('The chain is too short')
         pass
@@ -185,8 +203,9 @@ def transit_emcee(diz, ind, bestbin):
 
     if wl <= 2.7 and ind == bestbin:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
-                    r'$r_0$', r'$r_1$', r'$A_\mathrm{spot}$', \
-                    r'$w_\mathrm{spot}$', '$t_\mathrm{spot}$']
+                r'$r_0$', r'$r_1$', r'$A_\mathrm{spot}$', \
+                r'$w_\mathrm{spot}$', '$t_\mathrm{spot}$', \
+                r'$i$', '$t_\mathrm{tr}$']
     elif wl <= 2.7 and ind != bestbin:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
                     r'$r_0$', r'$r_1$', r'$A_\mathrm{spot}$']
@@ -196,10 +215,11 @@ def transit_emcee(diz, ind, bestbin):
 
     truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
                         [None]*(len(titles) - 1)))
-    ranges = [0.999]*samples.shape[1]
+
     if ind < 2 or ind == bestbin:
-        cornerplot.cornerplot(samples, titles, truths, ranges, \
-                diz['chains_folder'] + '/corner_' + str(ind) + '.pdf')
+        cornerplot.cornerplot(samples, titles, truths, \
+                diz['chains_folder'] + '/corner_' + str(ind) + '.pdf', \
+                ranges=None)
     plt.close('all')
     # Starspot size
     #size = starspot_size(diz, samples, str(ind))
@@ -288,20 +308,31 @@ def transit_spot_syst(par, t):
         if modeltype == 'fixt0':
             sig = wspot
             x0 = tspot
+            inclin = incl
+            tc = t0
         else:
             sig = par[6]
             x0 = par[7]
-        model = (transit_model([kr, q1, q2], t, wl) \
+            inclin = par[8]
+            tc = par[9]
+        model = (transit_model([kr, tc, inclin, q1, q2], t, wl) \
                 + gauss(t, [Aspot, x0, sig]))*np.polyval([r0, r1], t)
     else:
         kr = par[0]
         r0 = par[1]
         r1 = par[2]
         Aspot = par[3]
-        model = (transit_model([kr], t, wl) \
+        model = (transit_model([kr, t0, incl], t, wl) \
                 + gauss(t, [Aspot, tspot, wspot]))*np.polyval([r0, r1], t)
 
     return model
+
+def gauss(x, par):
+    '''
+    Par is defined as [A, x0, sigma]
+    '''
+    A, x0, sigma = par
+    return A*np.exp(-0.5*(x - x0)**2/sigma**2)
 
 def transit_model(par, t, wl, u1=0, u2=0):
     '''
@@ -313,15 +344,15 @@ def transit_model(par, t, wl, u1=0, u2=0):
 
     if wl <= 2.7:
         # Back to u1, u2
-        u1 = 2.*par[1]**0.5*par[2]
-        u2 = par[1]**0.5*(1. - 2.*par[2])
+        u1 = 2.*par[3]**0.5*par[4]
+        u2 = par[3]**0.5*(1. - 2.*par[4])
 
     params = batman.TransitParams()
-    params.t0 = t0
+    params.t0 = par[1]
     params.per = per_planet
     params.rp = par[0]
     params.a = aR
-    params.inc = inc # in degrees
+    params.inc = par[2] # in degrees
     params.ecc = 0.
     params.w = 0.
     params.u = [u1, u2]
@@ -367,35 +398,34 @@ def lnp_sine(val, valmax, valmin):
     '''
     Sine prior (value in radians) (CHECK)
     '''
-    return np.log(np.cos(val)/(np.sin(valmax) - np.sin(np(valmin))))
+    #return np.log(np.cos(val)/(np.sin(valmax) - np.sin(valmin)))
+    return 0.5*np.log(np.sin(val)/(np.cos(valmin) - np.cos(valmax)))
 
 def lnprior(p):
 
-    if len(p) == 8:
-        kr, q1, q2, r0, r1, A, sig, x0 = p
-        if np.logical_or.reduce((sig < 0., x0 < 0.08, x0 > 0.12, q1 < 0., \
-                    q1 > 1., q2 < 0., q1 > 1.)):
+    if len(p) == 10:
+        kr, q1, q2, r0, r1, A, sig, x0, inclin, ttr = p
+        if not np.logical_and.reduce((sig >= 0., 0.08 < x0 < 0.12, \
+                    0. <= q1 <= 1.,  0. <= q2 <= 1., 80. <= inclin <= 100.)):
             return -np.inf
     elif len(p) == 6:
         kr, q1, q2, r0, r1, A  = p
-        if np.logical_or.reduce((q1 < 0., q1 > 1., q2 < 0., q1 > 1.)):
+        if not np.logical_and.reduce(( 0. <= q1 <= 1., 0. <= q2 <= 1.)):
             return -np.inf
     elif len(p) == 4:
         kr, r0, r1, A = p
         q1, q2 = 0., 0.
 
-    if kr >= 0:
+    if kr >= 0.:
         lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
-        return lnp_kr
+        if len(p) == 10:
+            lnp_incl = lnp_sine(np.radians(inclin), np.radians(90.), \
+                        np.radians(80.))
+            return lnp_kr + lnp_incl
+        else:
+            return lnp_kr
     else:
         return -np.inf
-
-def gauss(x, par):
-    '''
-    Par is defined as [A, x0, sigma]
-    '''
-    A, x0, sigma = par
-    return A*np.exp(-0.5*(x - x0)**2/sigma**2)
 
 def starspot_size(diz, samples, channel):
     '''
