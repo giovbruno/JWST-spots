@@ -46,35 +46,31 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     spec = pickle.load(open(pardict['data_folder'] + 'spec_model_' \
                 + pardict['observatory'] + '.pic', 'rb'))
     ymoderr = spec[2]
-    bestbin = ymoderr.argmin()
-    #bestbin = 1
+    #bestbin = ymoderr.argmin()
+    bestbin = -1
     wl, A, x0, sigma = [], [], [], []
     yerrup, yerrdown = [], []
     kr, krunc = [], []
     for i in np.arange(expchan):
-        ffopen = open(pardict['chains_folder'] + 'chains_' \
-                + str(i) + '.pickle', 'rb')
-        res = pickle.load(ffopen)
-        wl.append(res['wl'])
-        if i == bestbin:
-            perc = res['Percentiles'][0][-4]
-            tspot = res['Percentiles'][0][-1]
-        else:
-            perc = res['Percentiles'][0][-1]
-        A.append(perc[2])
-        yerrup.append(perc[3] - perc[2])
-        yerrdown.append(perc[2] - perc[1])
-        ffopen.close()
+        if i < expchan - 2:
+            ffopen = open(pardict['chains_folder'] + 'chains_' \
+                    + str(i) + '.pickle', 'rb')
+            res = pickle.load(ffopen)
+            wl.append(res['wl'])
+            if i == bestbin:
+                perc = res['Percentiles'][0][-4]
+                tspot = res['Percentiles'][0][-1]
+            else:
+                perc = res['Percentiles'][0][-1]
+            A.append(perc[2])
+            yerrup.append(perc[3] - perc[2])
+            yerrdown.append(perc[2] - perc[1])
+            ffopen.close()
 
     # Take mean value for spot position
-    tspot = tspot[2]
+    #tspot = tspot[2]
     # Get **observed** mid-transit time
     mufit = -1
-    ### Starspot spectrum
-    # Quadraticall add uncertainty from first point
-    #for j in np.arange(1, len(A)):
-    #    yerrup[j] = np.sqrt(yerrup[0]**2 + yerrup[j]**2)
-    #    yerrdown[j] = np.sqrt(yerrdown[0]**2 + yerrdown[j]**2)
     wl = np.array(wl)
     if pardict['instrument'] == 'NIRCam':
         flag = wl < 4.
@@ -99,15 +95,12 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     elif pardict['instrument'] == 'NIRCam':
         wref = np.logical_and(wlminNIRCam < wl, wl < wlmaxNIRCam)
     Aref = np.mean(A[wref])
-    set_trace()
     yerrup /= Aref
     yerrdown /= Aref
     A /= Aref
     plt.figure()
     plt.errorbar(wl, A, yerr=[yerrup, yerrdown], fmt='ko', mfc='None', \
                     capsize=2)
-    plt.arrow(wl[bestbin], A[bestbin] + 1., 0, -0.5, linewidth=3)
-
     res = np.diff(wl)[0]
 
     dict_results = {}
@@ -148,7 +141,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
             likelihood[i] = np.exp(-0.5*chi2)
             dict_results[pm][stmod][temp - pardict['tstar']] = likelihood[i]
 
-        plt.xlabel('Wavelength [$\mu m$]', fontsize=16)
+        plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
         plt.ylabel(r'$\Delta f(\lambda)/\Delta f(\lambda_0)$', \
                     fontsize=16)
         maxL = np.argmax(likelihood)
@@ -180,6 +173,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     Tconf = [pdf.std(), pdf.std()]
     Tconf = pdf.interval(0.642) # % 64.2% confence interval
     dist = pdf.mean() - (pardict['tumbra'] - pardict['tstar'])
+
     #Tunc = dist
     #if (Tconf == pdf.median()).any():
     #    set_trace()
@@ -196,8 +190,8 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     #soln = least_squares(fitgauss, [valmax, x[prob.argmax()], 150.], \
     #            args=(x, prob), bounds=bbounds)
     #Tunc = soln.x[2]
-    dict_results[pardict['magstar']]['Tunc'] = [dist, Tsigma]
-    #ress = dict_results[10.5]['phoenix'].values()
+    #dict_results[pardict['magstar']]['Tunc'] = [dist, Tsigma]
+    dict_results[pardict['magstar']]['Tunc'] = [dist, Tsigma, tspot_[xmax]]
     #flag = ress < 2e-22
     plt.plot(x, prob, 'k-', label=r'$\Delta T = $' + str(int(dist)) \
             + 'K\n' + str(np.round(dist/Tsigma, 1)) + r'$\sigma$')
@@ -210,6 +204,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     plt.ylabel('Probability likelihood', fontsize=16)
     plt.legend()
     plt.savefig(plotname + stmod + '_' + pardict['observatory'] + '_like.pdf')
+    plt.close('all')
     fresults = open(resfile + stmod + '_grid.pic', 'wb')
 
     pickle.dump(dict_results, fresults)

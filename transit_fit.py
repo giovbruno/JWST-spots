@@ -33,11 +33,11 @@ def transit_spectro(pardict, resol=10):
     spec = pickle.load(open(pardict['data_folder'] + 'spec_model_' \
                 + pardict['observatory'] + '.pic', 'rb'))
     ymoderr = spec[2]
-    bestbin = ymoderr.argmin()
-    #bestbin = 1
+    #bestbin = ymoderr.argmin()
+    bestbin = -1
     transit_emcee(pardict, bestbin, bestbin)
 
-    for i in np.arange(expchan):
+    for i in np.arange(expchan - 1):
         if i != bestbin:
             transit_emcee(pardict, int(i), bestbin)
 
@@ -74,7 +74,8 @@ def transit_emcee(diz, ind, bestbin):
     bounds_model.append((0.0, 1.0))          # q1 from Kipping+2013
     bounds_model.append((0.0, 1.0))          # q2
     bounds_model.append((-1., 1.))           # r0
-    bounds_model.append((0., 2.))            # r1
+    bounds_model.append((-1., 1.))            # r1
+    bounds_model.append((0., 2.))            # r2
     bounds_model.append((1e-6, 1.))          # A
     bounds_model.append((1e-3, 0.11))        # sigma
     bounds_model.append((0.08, 0.12))        # x0 = 0.1051
@@ -82,7 +83,7 @@ def transit_emcee(diz, ind, bestbin):
     bounds_model.append((0.08, 0.12))        # t0
 
     # Initial values
-    kr, q1, q2, r0, r1 = 0.09, 0.3, 0.3, -1e-3, 1.
+    kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, -1e-3, 0., 1.
     A, wspot_, tspot_ = 1e-3, 0.005, 0.1
     incl_, t0_ = 89., 0.1
 
@@ -91,7 +92,7 @@ def transit_emcee(diz, ind, bestbin):
     global modeltype
     if ind == bestbin:
         modeltype = 'fitt0'
-        initial_params = kr, q1, q2, r0, r1, A, wspot_, tspot_, incl_, t0_
+        initial_params = kr, q1, q2, r0, r1, r2, A, wspot_, tspot_, incl_, t0_
     else:
         modeltype = 'fixt0'
         # Extract spot time from first wavelength bin
@@ -108,15 +109,15 @@ def transit_emcee(diz, ind, bestbin):
         tspot = perc[-3][2]
         incl = perc[-2][2]
         t0 = perc[-1][2]
-        if wl <= 2.7:
-            initial_params = kr, q1, q2, r0, r1, A
-            bounds_model = bounds_model[:-4]
-        else:
-            initial_params = kr, r0, r1, A
-            temp = []
-            for kk in [0, 3, 4, 5]:
-                temp.append(bounds_model[kk])
-            bounds_model = temp
+        #if wl <= 2.7:
+        initial_params = kr, q1, q2, r0, r1, r2, A
+        bounds_model = bounds_model[:-4]
+        #else:
+        #    initial_params = kr, r0, r1, r2, A
+        #    temp = []
+        #    for kk in [0, 3, 4, 5, 6]:
+        #        temp.append(bounds_model[kk])
+        #    bounds_model = temp
 
     # LM fit
     options= {}
@@ -141,14 +142,14 @@ def transit_emcee(diz, ind, bestbin):
             args=([t, y, yerr]), threads=8)
 
     # Variation around LM solution
-    p0 = initial + 0.05*(np.random.randn(nwalkers, ndim))*initial
+    p0 = initial + 0.1*(np.random.randn(nwalkers, ndim))*initial
                 #+ 1e-6*(np.random.randn(nwalkers, ndim))
 
     # Check condition number (must be < 1e8 to maximise walker linear
     # independence). Problems might be caued by LM results = 0
     cond = np.linalg.cond(p0)
     while cond >= 1e8:
-        p0 += 0.1*(np.random.randn(nwalkers, ndim))*initial
+        p0 += 1e-2*(np.random.randn(nwalkers, ndim))
         cond = np.linalg.cond(p0)
 
     print("Running burn-in...")
@@ -201,22 +202,24 @@ def transit_emcee(diz, ind, bestbin):
     plot_best(best_sol, t, y, yerr, wl, \
             diz['chains_folder'] + 'best_MCMC_' + str(ind) + '.pdf')
 
-    if wl <= 2.7 and ind == bestbin:
+    #if wl <= 2.7 and ind == bestbin:
+    if ind == bestbin:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
-                r'$r_0$', r'$r_1$', r'$A_\mathrm{spot}$', \
+                r'$r_0$', r'$r_1$', r'$r_2$', r'$A_\mathrm{spot}$', \
                 r'$w_\mathrm{spot}$', '$t_\mathrm{spot}$', \
                 r'$i$', '$t_\mathrm{tr}$']
-    elif wl <= 2.7 and ind != bestbin:
-        titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
-                    r'$r_0$', r'$r_1$', r'$A_\mathrm{spot}$']
+    #elif wl <= 2.7 and ind != bestbin:
     else:
-        titles = [r'$R_\mathrm{p}/R_\star$', r'$r_0$', r'$r_1$', \
-                    r'$A_\mathrm{spot}$']
+        titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
+                    r'$r_0$', r'$r_1$', r'$r_2$', r'$A_\mathrm{spot}$']
+    #else:
+    #    titles = [r'$R_\mathrm{p}/R_\star$', r'$r_0$', r'$r_1$', r'$r_2$', \
+    #                r'$A_\mathrm{spot}$']
 
     truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
                         [None]*(len(titles) - 1)))
 
-    if ind < 2 or ind == bestbin:
+    if ind == 0 or ind == bestbin:
         cornerplot.cornerplot(samples, titles, truths, \
                 diz['chains_folder'] + '/corner_' + str(ind) + '.pdf', \
                 ranges=None)
@@ -298,32 +301,34 @@ def plot_best(sol, t, y, yerr, wl, plotname):
 
 def transit_spot_syst(par, t):
 
-    if wl <= 2.7:
+    if wl <= 10.:
         kr = par[0]
         q1 = par[1]
         q2 = par[2]
         r0 = par[3]
         r1 = par[4]
-        Aspot = par[5]
+        r2 = par[5]
+        Aspot = par[6]
         if modeltype == 'fixt0':
             sig = wspot
             x0 = tspot
             inclin = incl
             tc = t0
         else:
-            sig = par[6]
-            x0 = par[7]
-            inclin = par[8]
-            tc = par[9]
+            sig = par[7]
+            x0 = par[8]
+            inclin = par[9]
+            tc = par[10]
         model = (transit_model([kr, tc, inclin, q1, q2], t, wl) \
-                + gauss(t, [Aspot, x0, sig]))*np.polyval([r0, r1], t)
+                + gauss(t, [Aspot, x0, sig]))*np.polyval([r0, r1, r2], t)
     else:
         kr = par[0]
         r0 = par[1]
         r1 = par[2]
-        Aspot = par[3]
+        r2 = par[3]
+        Aspot = par[4]
         model = (transit_model([kr, t0, incl], t, wl) \
-                + gauss(t, [Aspot, tspot, wspot]))*np.polyval([r0, r1], t)
+                + gauss(t, [Aspot, tspot, wspot]))*np.polyval([r0, r1, r2], t)
 
     return model
 
@@ -342,7 +347,7 @@ def transit_model(par, t, wl, u1=0, u2=0):
     # q1 and q1 (as free parameters) are Kipping's parameters
     '''
 
-    if wl <= 2.7:
+    if wl <= 12.7:
         # Back to u1, u2
         u1 = 2.*par[3]**0.5*par[4]
         u2 = par[3]**0.5*(1. - 2.*par[4])
@@ -403,22 +408,22 @@ def lnp_sine(val, valmax, valmin):
 
 def lnprior(p):
 
-    if len(p) == 10:
-        kr, q1, q2, r0, r1, A, sig, x0, inclin, ttr = p
+    if len(p) == 11:
+        kr, q1, q2, r0, r1, r2, A, sig, x0, inclin, ttr = p
         if not np.logical_and.reduce((sig >= 0., 0.08 < x0 < 0.12, \
                     0. <= q1 <= 1.,  0. <= q2 <= 1., 80. <= inclin <= 100.)):
             return -np.inf
-    elif len(p) == 6:
-        kr, q1, q2, r0, r1, A  = p
+    elif len(p) == 7:
+        kr, q1, q2, r0, r1, r2, A  = p
         if not np.logical_and.reduce(( 0. <= q1 <= 1., 0. <= q2 <= 1.)):
             return -np.inf
-    elif len(p) == 4:
-        kr, r0, r1, A = p
+    elif len(p) == 5:
+        kr, r0, r1, r2, A = p
         q1, q2 = 0., 0.
 
     if kr >= 0.:
         lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
-        if len(p) == 10:
+        if len(p) == 11:
             lnp_incl = lnp_sine(np.radians(inclin), np.radians(90.), \
                         np.radians(80.))
             return lnp_kr + lnp_incl
