@@ -174,9 +174,9 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                             fittype=fittype, \
                             spotted_starmodel=spotted_starmodel)
 
-    plot_res(ip, mags, tcontrast, models, fittype)
+    #plot_res(ip, mags, tcontrast, models, fittype)
     #map_uncertainties(mags, tcontrast, ip)
-    plot_unc_results(instrum, ip)
+    #plot_unc_results(instrum, ip)
 
     plt.close('all')
 
@@ -390,14 +390,14 @@ def launch():
                     inputpars['aumbra'] = asize
                     inputpars['incl'] = incl
                     inputpars['theta'] = theta
-                    if ~np.logical_and.reduce((i == 0, j == 0, k == 0, m == 0)):
-                        cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                            simulate_transits=True, fit_transits=True, \
-                            fit_spectra=True, spotted_starmodel=False, \
-                            inputpars=inputpars)
+                    #if ~np.logical_and.reduce((i == 0, j == 0, k == 0, m == 0)):
+                    cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                        simulate_transits=True, fit_transits=False, \
+                        fit_spectra=False, spotted_starmodel=False, \
+                        inputpars=inputpars)
                     cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                        simulate_transits=True, fit_transits=True, \
-                        fit_spectra=True, spotted_starmodel=False, \
+                        simulate_transits=True, fit_transits=False, \
+                        fit_spectra=False, spotted_starmodel=False, \
                         inputpars=inputpars)
 
     return

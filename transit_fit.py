@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
+from scipy.special import erf
 import os, sys, pickle
 sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
 import emcee
@@ -75,9 +76,10 @@ def transit_emcee(diz, ind, bestbin):
     bounds_model.append((0.0, 1.0))          # q2
     bounds_model.append((-1., 1.))           # r0
     bounds_model.append((-1., 1.))           # r1
-    bounds_model.append((0., 10.))            # r2
-    bounds_model.append((1e-6, 1.))          # A
-    bounds_model.append((1e-3, 0.11))        # sigma
+    bounds_model.append((0., 10.))           # r2
+    bounds_model.append((2., 10.))           # n # Flat gaussian
+    bounds_model.append((1e-6, 1))           # A
+    bounds_model.append((1e-6, 0.1))         # sigma
     bounds_model.append((0.06, 0.14))        # x0 = 0.1051
     bounds_model.append((80., 100.))         # orbit inclination
     bounds_model.append((0.08, 0.12))        # t0
@@ -88,18 +90,20 @@ def transit_emcee(diz, ind, bestbin):
         tspot_ = 0.1
     else:
         if diz['tstar'] == 3500:
-            tspot_ = 0.11
+            tspot_ = 0.115
         else:
             tspot_ = 0.13
-    A, wspot_ = 1e-3, 0.005
+    A, wspot_ = 1e-3, 0.01
     incl_, t0_ = 89., 0.1
+    n = 2.
 
     # This will set the fit or fix for tspot and spot size
     # Spot position and size are fitted only on the bluemost wavelength bin
     global modeltype
     if ind == bestbin:
         modeltype = 'fitt0'
-        initial_params = kr, q1, q2, r0, r1, r2, A, wspot_, tspot_, incl_, t0_
+        initial_params = kr, q1, q2, r0, r1, r2, n, A, \
+                            wspot_, tspot_, incl_, t0_
     else:
         modeltype = 'fixt0'
         # Extract spot time from first wavelength bin
@@ -117,7 +121,7 @@ def transit_emcee(diz, ind, bestbin):
         incl = perc[-2][2]
         t0 = perc[-1][2]
         #if wl <= 2.7:
-        initial_params = kr, q1, q2, r0, r1, r2, A
+        initial_params = kr, q1, q2, r0, r1, r2, n, A
         bounds_model = bounds_model[:-4]
         #else:
         #    initial_params = kr, r0, r1, r2, A
@@ -160,7 +164,10 @@ def transit_emcee(diz, ind, bestbin):
         cond = np.linalg.cond(p0)
 
     print("Running burn-in...")
-    nsteps = 700
+    if ind == bestbin:
+        nsteps = 1000
+    else:
+        nsteps = 700
     width = 30
     for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
         n = int((width+1)*float(i)/nsteps)
@@ -170,7 +177,10 @@ def transit_emcee(diz, ind, bestbin):
     sampler.reset()
 
     print("Running production...")
-    nsteps = 2000
+    if ind == bestbin:
+        nsteps = 2500
+    else:
+        nsteps = 1500
     width = 30
     for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
         n = int((width+1) * float(i) / nsteps)
@@ -212,13 +222,14 @@ def transit_emcee(diz, ind, bestbin):
     #if wl <= 2.7 and ind == bestbin:
     if ind == bestbin:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
-                r'$r_0$', r'$r_1$', r'$r_2$', r'$A_\mathrm{spot}$', \
-                r'$w_\mathrm{spot}$', '$t_\mathrm{spot}$', \
-                r'$i$', '$t_\mathrm{tr}$']
+                r'$r_0$', r'$r_1$', r'$r_2$', r'$n$', \
+                r'$A_\mathrm{spot}$', r'$w_\mathrm{spot}$', \
+                '$t_\mathrm{spot}$', r'$i$', '$t_\mathrm{tr}$']
     #elif wl <= 2.7 and ind != bestbin:
     else:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
-                    r'$r_0$', r'$r_1$', r'$r_2$', r'$A_\mathrm{spot}$']
+                    r'$r_0$', r'$r_1$', r'$r_2$', r'$n$', \
+                    r'$A_\mathrm{spot}$']
     #else:
     #    titles = [r'$R_\mathrm{p}/R_\star$', r'$r_0$', r'$r_1$', r'$r_2$', \
     #                r'$A_\mathrm{spot}$']
@@ -315,36 +326,41 @@ def transit_spot_syst(par, t):
         r0 = par[3]
         r1 = par[4]
         r2 = par[5]
-        Aspot = par[6]
+        n = par[6]
+        Aspot = par[7]
         if modeltype == 'fixt0':
             sig = wspot
             x0 = tspot
             inclin = incl
             tc = t0
         else:
-            sig = par[7]
-            x0 = par[8]
-            inclin = par[9]
-            tc = par[10]
+            sig = par[-4]
+            x0 = par[-3]
+            inclin = par[-2]
+            tc = par[-1]
         model = (transit_model([kr, tc, inclin, q1, q2], t, wl) \
-                + gauss(t, [Aspot, x0, sig]))*np.polyval([r0, r1, r2], t)
+            + gauss(t, [Aspot, x0, sig, n]))*np.polyval([r0, r1, r2], t)
     else:
         kr = par[0]
         r0 = par[1]
         r1 = par[2]
         r2 = par[3]
-        Aspot = par[4]
+        n = par[4]
+        Aspot = par[5]
         model = (transit_model([kr, t0, incl], t, wl) \
-                + gauss(t, [Aspot, tspot, wspot]))*np.polyval([r0, r1, r2], t)
+         + gauss(t, [Aspot, tspot, wspot, n]))*np.polyval([r0, r1, r2], t)
 
     return model
 
 def gauss(x, par):
     '''
-    Par is defined as [A, x0, sigma]
+    Generalised Gaussian. Par is defined as [A, x0, sigma, n]
+    (flat for n > 2, peaked for n < 2).
     '''
-    A, x0, sigma = par
-    return A*np.exp(-0.5*(x - x0)**2/sigma**2)
+    A, x0, sigma, n = par
+    y = A*np.exp(-(abs(x - x0)/sigma)**n)
+
+    return y
 
 def transit_model(par, t, wl, u1=0, u2=0):
     '''
@@ -415,22 +431,23 @@ def lnp_sine(val, valmax, valmin):
 
 def lnprior(p):
 
-    if len(p) == 11:
-        kr, q1, q2, r0, r1, r2, A, sig, x0, inclin, ttr = p
-        if not np.logical_and.reduce((sig >= 0., A >= 0, 0.06 < x0 < 0.14, \
+    if len(p) == 12:
+        kr, q1, q2, r0, r1, r2, n, A, sig, x0, inclin, ttr = p
+        if not np.logical_and.reduce((sig >= 0., 0.06 < x0 < 0.14, \
                     0. <= q1 <= 1.,  0. <= q2 <= 1., 80. <= inclin <= 100.)):
             return -np.inf
-    elif len(p) == 7:
-        kr, q1, q2, r0, r1, r2, A  = p
-        if not np.logical_and.reduce(( 0. <= q1 <= 1., 0. <= q2 <= 1.)):
+    elif len(p) == 8:
+        kr, q1, q2, r0, r1, r2, n, A  = p
+        if not np.logical_and( 0. <= q1 <= 1., 0. <= q2 <= 1):
             return -np.inf
-    elif len(p) == 5:
-        kr, r0, r1, r2, A = p
+    elif len(p) == 6:
+        kr, r0, r1, r2, n, A = p
         q1, q2 = 0., 0.
 
-    if kr >= 0.:
+    if np.logical_and.reduce((kr >= 0., np.logical_and(n >= 2., n < 10.), \
+        A >= 0.)):
         lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
-        if len(p) == 11:
+        if len(p) == 12:
             lnp_incl = lnp_sine(np.radians(inclin), np.radians(90.), \
                         np.radians(60.))
             return lnp_kr + lnp_incl

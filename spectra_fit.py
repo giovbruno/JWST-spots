@@ -11,10 +11,12 @@ from pdb import set_trace
 from astropy.io import fits
 from astropy.modeling import blackbody as bb
 from simulate_transit import degrade_spec, integ_filter
+import os
 
-modelsfolder = '/home/giovanni/Shelf/stellar_models/phxinten/HiRes/'
-foldthrough = '/home/giovanni/Shelf/filters/'
-intensfolder = '/home/giovanni/Shelf/stellar_models/phxinten/SpecInt/'
+homef = os.path.expanduser('~')
+modelsfolder = homef + '/Shelf/stellar_models/phxinten/HiRes/'
+foldthrough = homef + '/Shelf/filters/'
+intensfolder = homef + '/Shelf/stellar_models/phxinten/SpecInt/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
@@ -58,7 +60,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
             res = pickle.load(ffopen)
             wl.append(res['wl'])
             if i == bestbin:
-                perc = res['Percentiles'][0][-4]
+                perc = res['Percentiles'][0][-5]
                 tspot = res['Percentiles'][0][-1]
             else:
                 perc = res['Percentiles'][0][-1]
