@@ -63,8 +63,8 @@ def transit_emcee(diz, ind, bestbin):
     rhostar = 5.14e-5/diz['rstar']*10**diz['loggstar'] #cgs
     global aR
     aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
-    global inc
-    inc = 90.
+    #global inc
+    #inc = 90.
     #global t0
     #t0 = 0.10
 
@@ -74,17 +74,24 @@ def transit_emcee(diz, ind, bestbin):
     bounds_model.append((0.0, 1.0))          # q1 from Kipping+2013
     bounds_model.append((0.0, 1.0))          # q2
     bounds_model.append((-1., 1.))           # r0
-    bounds_model.append((-1., 1.))            # r1
-    bounds_model.append((0., 2.))            # r2
+    bounds_model.append((-1., 1.))           # r1
+    bounds_model.append((0., 10.))            # r2
     bounds_model.append((1e-6, 1.))          # A
     bounds_model.append((1e-3, 0.11))        # sigma
-    bounds_model.append((0.08, 0.12))        # x0 = 0.1051
-    bounds_model.append((80., 90.))          # orbit inclination
+    bounds_model.append((0.06, 0.14))        # x0 = 0.1051
+    bounds_model.append((80., 100.))         # orbit inclination
     bounds_model.append((0.08, 0.12))        # t0
 
     # Initial values
     kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, -1e-3, 0., 1.
-    A, wspot_, tspot_ = 1e-3, 0.005, 0.1
+    if diz['theta'] == 0.:
+        tspot_ = 0.1
+    else:
+        if diz['tstar'] == 3500:
+            tspot_ = 0.11
+        else:
+            tspot_ = 0.13
+    A, wspot_ = 1e-3, 0.005
     incl_, t0_ = 89., 0.1
 
     # This will set the fit or fix for tspot and spot size
@@ -142,14 +149,14 @@ def transit_emcee(diz, ind, bestbin):
             args=([t, y, yerr]), threads=8)
 
     # Variation around LM solution
-    p0 = initial + 0.1*(np.random.randn(nwalkers, ndim))*initial
+    p0 = initial + 0.01*(np.random.randn(nwalkers, ndim))*initial
                 #+ 1e-6*(np.random.randn(nwalkers, ndim))
 
     # Check condition number (must be < 1e8 to maximise walker linear
     # independence). Problems might be caued by LM results = 0
     cond = np.linalg.cond(p0)
     while cond >= 1e8:
-        p0 += 1e-2*(np.random.randn(nwalkers, ndim))
+        p0 += 1e-4*(np.random.randn(nwalkers, ndim))
         cond = np.linalg.cond(p0)
 
     print("Running burn-in...")
@@ -410,7 +417,7 @@ def lnprior(p):
 
     if len(p) == 11:
         kr, q1, q2, r0, r1, r2, A, sig, x0, inclin, ttr = p
-        if not np.logical_and.reduce((sig >= 0., 0.08 < x0 < 0.12, \
+        if not np.logical_and.reduce((sig >= 0., A >= 0, 0.06 < x0 < 0.14, \
                     0. <= q1 <= 1.,  0. <= q2 <= 1., 80. <= inclin <= 100.)):
             return -np.inf
     elif len(p) == 7:
@@ -425,7 +432,7 @@ def lnprior(p):
         lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
         if len(p) == 11:
             lnp_incl = lnp_sine(np.radians(inclin), np.radians(90.), \
-                        np.radians(80.))
+                        np.radians(60.))
             return lnp_kr + lnp_incl
         else:
             return lnp_kr

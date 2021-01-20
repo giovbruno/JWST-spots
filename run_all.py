@@ -27,6 +27,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + str(pardict['loggstar']) + '_spot' + str(int(pardict['tumbra'])) \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) \
+            + '_theta' + str(int(pardict['theta'])) \
             + '_mag' + str(magstar) + '/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
@@ -133,7 +134,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['tpenumbra'] = 5500
     ip['aumbra'] = inputpars['aumbra']
     ip['incl'] = inputpars['incl']
-    ip['muindex'] = inputpars['mu']
+    ip['theta'] = inputpars['theta']
     ip['instrument'] = instrum
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
@@ -157,6 +158,11 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['starmodel'] = dict_starmodel
     ip['spotmodels'] = dict_spotmodels
 
+    # Get mu index in Josh models
+    if models == 'josh':
+        muval = np.cos(np.radians(ip['theta']))
+        ip['muindex'] = abs(ip['starmodel']['mus'] - muval).argmin()
+
     if tstar == 3500:
     # Very cool models will only be used for the fit
         tcontrast = np.arange(-1000, 0, 100)
@@ -172,7 +178,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     #map_uncertainties(mags, tcontrast, ip)
     plot_unc_results(instrum, ip)
 
-    #plt.close('all')
+    plt.close('all')
 
     return
 
@@ -204,8 +210,10 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
                     + str(int(ip['tstar'])) + 'K/p' \
                     + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
                     + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
-                    + '_spot' + str(int(ip['tstar'] + td)) + '_' \
-                    + str(int(ip['tpenumbra'])) + '_a' + str(int(ip['aumbra'])) \
+                    + '_spot' + str(int(ip['tstar'] + td)) \
+                    + '_i' + str(int(ip['incl'])) \
+                    + '_a' + str(int(ip['aumbra'])) \
+                    + '_theta' + str(int(ip['theta'])) \
                     + '_mag' + str(mag) + '/MCMC/'
                 try:
                     resfile = open(chains_folder + 'contrast_res_' \
@@ -249,10 +257,11 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
         ax.set_ylabel(r'Input $T_\bullet$ [K]', fontsize=16)
         ax.set_title(str(int(ip['tstar'])) + ' K star, ' \
                 + ip['instrument'].replace('_', ' '), fontsize=16)
-        plt.show()
+        #plt.show()
         plt.savefig(project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/accuracy_' + mod \
-                + '_a' + str(int(ip['aumbra'])) + '.pdf')
+                + '_a' + str(int(ip['aumbra'])) \
+                + '_theta' + str(int(ip['theta'])) + '.pdf')
         #plt.subplot(212)#figure()
         #frame2.plot(mags, tdiff_unc, 'ko-')
         #frame2.set_xlabel('K mag', fontsize=16)
@@ -264,7 +273,8 @@ def plot_res(inputpars, mags, tcontrast, models, fittype):
         # Save uncertainty array
         fout = open(project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/' + 'uncertainty_array_' \
-                + 'a' + str(int(ip['aumbra'])) + '.pic', 'wb')
+                + 'a' + str(int(ip['aumbra'])) \
+                + '_theta' + str(int(ip['theta'])) + '.pic', 'wb')
         pickle.dump([mags, tdiff_unc], fout)
         fout.close()
 
@@ -364,48 +374,30 @@ def ingest_stellarspectra(tstar, tcontrast, loggstar):
         dict_spotmodels[tc]['wl'] = np.array([g[i][0] for i in range(2,len(g))])
         dict_spotmodels[tc]['spec'] = []
         for j, mm in enumerate(mus):
-            if j == len(mus) - 1: # Take only mu = 1
-                spec = [g[i][j + 1] for i in range(2, len(g))]
-                dict_spotmodels[tc]['spec'].append(np.array(spec))
+            #if j == len(mus) - 1: # Take only mu = 1
+            spec = [g[i][j + 1] for i in range(2, len(g))]
+            dict_spotmodels[tc]['spec'].append(np.array(spec))
 
     return dict_starmodel, dict_spotmodels
 
 def launch():
 
-    for asize in [3, 2, 1]:
-        for incl in [86.5, 90.]:
-            for mu in [-1, 10]:
-                for instrum in ['NIRCam', 'NIRSpec_Prism']:
+    for m, instrum in enumerate(['NIRCam', 'NIRSpec_Prism']):
+        for i, asize in enumerate([3, 2, 1]):
+            for j, incl in enumerate([90.]):
+                for k, theta in enumerate([40., 0.]): # mu angle
                     inputpars = {}
                     inputpars['aumbra'] = asize
                     inputpars['incl'] = incl
-                    inputpars['mu'] = mu
-                    cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                        simulate_transits=True, fit_transits=True, \
-                        fit_spectra=True, spotted_starmodel=False, \
-                        inputpars=inputpars)
+                    inputpars['theta'] = theta
+                    if ~np.logical_and.reduce((i == 0, j == 0, k == 0, m == 0)):
+                        cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                            simulate_transits=True, fit_transits=True, \
+                            fit_spectra=True, spotted_starmodel=False, \
+                            inputpars=inputpars)
                     cycle(1.0, 1.0, 5000, 4.5, instrum, \
                         simulate_transits=True, fit_transits=True, \
                         fit_spectra=True, spotted_starmodel=False, \
                         inputpars=inputpars)
-
-    #cycle(1.0, 1.0, 5000, 3., 4.5, 'NIRCam', \
-    # simulate_transits=False, fit_transits=False, fit_spectra=True, \
-    # spotted_starmodel=False)
-    #cycle(0.3, 0.3, 3500, 3., 5.0, 'NIRCam', \
-    # simulate_transits=False, fit_transits=False, fit_spectra=True, \
-    # spotted_starmodel=False)
-    #cycle(0.3, 0.3, 3500, 2., 5.0, 'NIRSpec_Prism', \
-    # simulate_transits=False, fit_transits=False, fit_spectra=True, \
-    # spotted_starmodel=False)
-    #cycle(1.0, 1.0, 5000, 2., 4.5, 'NIRSpec_Prism', \
-    # simulate_transits=False, fit_transits=False, fit_spectra=True, \
-    # spotted_starmodel=False)
-    #cycle(0.3, 0.3, 3500, 2., 5.0, 'NIRCam', \
-    # simulate_transits=False, fit_transits=False, fit_spectra=True, \
-    # spotted_starmodel=False)
-    #cycle(1.0, 1.0, 5000, 2., 4.5, 'NIRCam', \
-    # simulate_transits=False, fit_transits=False, fit_spectra=True, \
-    # spotted_starmodel=False)
 
     return

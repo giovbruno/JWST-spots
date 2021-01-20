@@ -16,13 +16,14 @@ import rebin
 import pickle
 import os
 from astropy.io import fits
-sys.path.append('/home/giovanni/Projects/ld_variations/code/Light-curve-tools/')
+homedir = os.path.expanduser('~')
+sys.path.append(homedir + '/Projects/ld_variations/code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
 from pdb import set_trace
 
-modelsfolder = '/home/giovanni/Shelf/stellar_models/phxinten/HiRes/'
-foldthrough = '/home/giovanni/Shelf/filters/'
+modelsfolder = homedir + '/Shelf/stellar_models/phxinten/HiRes/'
+foldthrough = homedir + '/Shelf/filters/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
@@ -287,10 +288,11 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         fix_dict['prot'] = 11.0   # Hebrard+2012
         fix_dict['incl'] = 90.
         fix_dict['posang'] = 0.
-        if pardict['tstar'] == 3500:
-            fix_dict['lat'] = 28. # 1at umbra
-        elif pardict['tstar'] == 5000:
-            fix_dict['lat'] = 12.
+        #if pardict['tstar'] == 3500:
+        #    fix_dict['lat'] = 28. # 1at umbra
+        #elif pardict['tstar'] == 5000:
+        #    fix_dict['lat'] = 12.
+        fix_dict['lat'] = 0.
         fix_dict['latp'] = 12. # penumbra
         #fix_dict['rho'] = 1.7*1.408 #5000 K star ~ WASP-52
         #fix_dict['rho'] = 13.7*1.408 # 3500 K star ~ Kepler-1646
@@ -310,7 +312,9 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
 
         params[2], params[3] = ldlist[i][0], ldlist[i][1]
         if pardict['tstar'] == 3500 or pardict['tstar'] == 5000:
-            params[4], params[5] = 260, pardict['aumbra']  # M
+            # Find spot longitude corresponding to given mu
+            longspot = 266. - pardict['theta']
+            params[4], params[5] = longspot, pardict['aumbra']  # M
         if not pardict['spotted_starmodel']:
             if models == 'phoenix':
                 modstar = pysynphot.Icat(models, pardict['tstar'], 0.0, \
@@ -412,8 +416,6 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
             i = -1
         plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
                         + '_' + pardict['observatory'] + '.pdf')
-        plt.show()
-        set_trace()
         savefile = open(pardict['data_folder'] + 'transit_spots' \
                         + '_' + str(i) + '.pic', 'wb')
         pickle.dump([tt, transit, yerr, xobs[i]], savefile)
