@@ -318,17 +318,12 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     #        = [tspot_[xmin] - tspot_[trueval], Tsigma, distchi2, xsigma, \
     #            min(chi2r)/(len(A) - 2), chi2r, spotSNR, Trange]
     dict_results[pardict['magstar']]['Tunc'] \
-            = [dist, Tconf, x, prob, 0, 0, spotSNR]
-    if dist < 0:
-        zz = dist/Tconf[0]
-    else:
-        zz = dist/Tconf[1]
+            = [dist, Tconf, 0, 0, 0, 0, spotSNR]
     #flag = ress < 2e-22
     sig3 = pdf.interval(0.997)
-    plt.plot([sig3[0], sig3[0]], [0., prob.max() + 0.01], 'g')
-    plt.plot([sig3[1], sig3[1]], [0., prob.max() + 0.01], 'g')
+    plt.plot([sig3[0], sig3[1]], [0., prob.max()])
     plt.plot(x, prob, 'k.-', label=r'$\Delta T = $' + str(int(dist)) \
-            + 'K\n' + str(np.round(zz, 1)) + r'$\sigma$')
+            + 'K\n' + str(np.round(dist/Tsigma, 1)) + r'$\sigma$')
     #plt.plot(x, chi2r/chi2r.min(), 'k.-', label=r'$\Delta T = $' \
     #    + str(tspot_[xmin] - tspot_[trueval]) + ' K\n$C=$' \
     #    + str(np.round(distchi2, 3)))
@@ -337,9 +332,9 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     #xTh = np.linspace(x.min(), x.max(), 1000)
     #plt.plot(xTh, gauss(soln.x, xTh), 'cyan')
     plt.plot([-pardict['tstar'] + pardict['tumbra'], \
-            -pardict['tstar'] + pardict['tumbra']], [0., prob.max() + 0.01], 'r')
+            -pardict['tstar'] + pardict['tumbra']], [0., 10.], 'r')
     plt.xlabel(r'$\Delta T_\mathrm{spot}$ [K]', fontsize=14)
-    plt.ylabel('Probability likelihood', fontsize=14)
+    #plt.ylabel('Probability likelihood', fontsize=16)
     #plt.ylabel('$\chi^2/\chi^2_\mathrm{min}$', fontsize=14)
     #plt.ylim(0.9, 5.)
     plt.title(str(pardict['tstar']) + ' ' + str(pardict['tumbra']) + ' ' \
@@ -694,4 +689,4 @@ def compare_specific_intensity(tstar, tcontrast, loggstar, muindex):
 
     plt.show()
     set_trace()
-    retur
+    return

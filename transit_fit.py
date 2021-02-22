@@ -77,22 +77,25 @@ def transit_emcee(diz, ind, bestbin):
     bounds_model.append((-1., 1.))           # r0
     bounds_model.append((-1., 1.))           # r1
     bounds_model.append((0., 10.))           # r2
-    bounds_model.append((2., 10.))           # n # Flat gaussian
     bounds_model.append((1e-6, 1))           # A
+    bounds_model.append((2., 10.))           # n # Flat gaussian
     bounds_model.append((1e-6, 0.1))         # sigma
-    bounds_model.append((0.06, 0.14))        # x0 = 0.1051
+    bounds_model.append((0.06, 0.15))        # x0 = 0.1051
     bounds_model.append((80., 100.))         # orbit inclination
     bounds_model.append((0.08, 0.12))        # t0
 
     # Initial values
-    kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, -1e-3, 0., 1.
+    kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, 1e-3, 0., 1.
     if diz['theta'] == 0.:
-        tspot_ = 0.1
+        tspot_ = 0.09 #0.1
     else:
         if diz['tstar'] == 3500:
-            tspot_ = 0.115
+            if diz['instrument'] == 'NIRCam':
+                tspot_ = 0.115
+            else:
+                tspot_ = 0.95 # This seems to work better for NIRSpec
         else:
-            tspot_ = 0.13
+            tspot_ = 0.135 # 0.13
     A, wspot_ = 1e-3, 0.01
     incl_, t0_ = 89., 0.1
     n = 2.
@@ -102,7 +105,7 @@ def transit_emcee(diz, ind, bestbin):
     global modeltype
     if ind == bestbin:
         modeltype = 'fitt0'
-        initial_params = kr, q1, q2, r0, r1, r2, n, A, \
+        initial_params = kr, q1, q2, r0, r1, r2, A, n, \
                             wspot_, tspot_, incl_, t0_
     else:
         modeltype = 'fixt0'
@@ -116,13 +119,15 @@ def transit_emcee(diz, ind, bestbin):
         global tspot
         global incl
         global t0
+        global nspot
+        nspot = perc[-5][2]
         wspot = perc[-4][2]
         tspot = perc[-3][2]
         incl = perc[-2][2]
         t0 = perc[-1][2]
         #if wl <= 2.7:
-        initial_params = kr, q1, q2, r0, r1, r2, n, A
-        bounds_model = bounds_model[:-4]
+        initial_params = kr, q1, q2, r0, r1, r2, A
+        bounds_model = bounds_model[:-5]
         #else:
         #    initial_params = kr, r0, r1, r2, A
         #    temp = []
@@ -146,9 +151,9 @@ def transit_emcee(diz, ind, bestbin):
     # Now, MCMC starting about the optimized solution
     initial = np.array(soln.x)
     if ind == bestbin:
-        ndim, nwalkers = len(initial), 128
+        ndim, nwalkers = len(initial), 40 #128
     else:
-        ndim, nwalkers = len(initial), 32
+        ndim, nwalkers = len(initial), 20 #64
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
             args=([t, y, yerr]), threads=8)
 
@@ -222,14 +227,14 @@ def transit_emcee(diz, ind, bestbin):
     #if wl <= 2.7 and ind == bestbin:
     if ind == bestbin:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
-                r'$r_0$', r'$r_1$', r'$r_2$', r'$n$', \
-                r'$A_\mathrm{spot}$', r'$w_\mathrm{spot}$', \
+                r'$r_0$', r'$r_1$', r'$r_2$', \
+                r'$\alpha_\mathrm{spot}$', r'$n$', r'$w_\mathrm{spot}$', \
                 '$t_\mathrm{spot}$', r'$i$', '$t_\mathrm{tr}$']
     #elif wl <= 2.7 and ind != bestbin:
     else:
         titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
-                    r'$r_0$', r'$r_1$', r'$r_2$', r'$n$', \
-                    r'$A_\mathrm{spot}$']
+                    r'$r_0$', r'$r_1$', r'$r_2$', \
+                    r'$\alpha_\mathrm{spot}$']
     #else:
     #    titles = [r'$R_\mathrm{p}/R_\star$', r'$r_0$', r'$r_1$', r'$r_2$', \
     #                r'$A_\mathrm{spot}$']
@@ -326,14 +331,16 @@ def transit_spot_syst(par, t):
         r0 = par[3]
         r1 = par[4]
         r2 = par[5]
-        n = par[6]
-        Aspot = par[7]
+        Aspot = par[6]
+        #n = par[7]
         if modeltype == 'fixt0':
+            n = nspot
             sig = wspot
             x0 = tspot
             inclin = incl
             tc = t0
         else:
+            n = par[-5]
             sig = par[-4]
             x0 = par[-3]
             inclin = par[-2]
@@ -345,8 +352,8 @@ def transit_spot_syst(par, t):
         r0 = par[1]
         r1 = par[2]
         r2 = par[3]
-        n = par[4]
         Aspot = par[5]
+        n = par[6]
         model = (transit_model([kr, t0, incl], t, wl) \
          + gauss(t, [Aspot, tspot, wspot, n]))*np.polyval([r0, r1, r2], t)
 
@@ -432,20 +439,20 @@ def lnp_sine(val, valmax, valmin):
 def lnprior(p):
 
     if len(p) == 12:
-        kr, q1, q2, r0, r1, r2, n, A, sig, x0, inclin, ttr = p
-        if not np.logical_and.reduce((sig >= 0., 0.06 < x0 < 0.14, \
-                    0. <= q1 <= 1.,  0. <= q2 <= 1., 80. <= inclin <= 100.)):
+        kr, q1, q2, r0, r1, r2, A, n, sig, x0, inclin, ttr = p
+        if not np.logical_and.reduce((sig >= 0., 0.06 < x0 < 0.15, \
+                    0. <= q1 <= 1.,  0. <= q2 <= 1., 80. <= inclin <= 100., \
+                    2. <= n < 10.)):
             return -np.inf
-    elif len(p) == 8:
-        kr, q1, q2, r0, r1, r2, n, A  = p
-        if not np.logical_and( 0. <= q1 <= 1., 0. <= q2 <= 1):
+    elif len(p) == 7:
+        kr, q1, q2, r0, r1, r2, A = p
+        if not np.logical_and(0. <= q1 <= 1., 0. <= q2 <= 1):
             return -np.inf
     elif len(p) == 6:
-        kr, r0, r1, r2, n, A = p
+        kr, r0, r1, r2, A, n = p
         q1, q2 = 0., 0.
 
-    if np.logical_and.reduce((kr >= 0., np.logical_and(n >= 2., n < 10.), \
-        A >= 0.)):
+    if np.logical_and(kr >= 0., A >= 0.):
         lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
         if len(p) == 12:
             lnp_incl = lnp_sine(np.radians(inclin), np.radians(90.), \

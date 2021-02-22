@@ -326,8 +326,8 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
                 # not phoenix (dependency on mu angle)
                 starm = pardict['starmodel']['spec'][pardict['muindex']]
                 wave = pardict['starmodel']['wl']
-                tspot_ = format(pardict['tumbra'], '2.2e')
-                spot = pardict['spotmodels'][tspot_]['spec'][pardict['muindex']]
+                #tspot_ = format(pardict['tumbra'], '2.2e')
+                #spot = pardict['spotmodels'][tspot_]['spec'][pardict['muindex']]
         else:
             if pardict['instrument'] == 'NIRCam':
                 generate_spotted_spectra(pardict, models='phoenix')
@@ -346,11 +346,11 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
             umbram = pardict['spotmodels'][tspot_]['spec'][pardict['muindex']]
             #penumbram = np.copy(umbram)
         wave = np.array(wave)
-        fflag = wave < 60000.
-        wave = wave[fflag]
-        starm = starm[fflag]
-        fflagu = wlumbra < 60000.
-        umbram = umbram[fflagu]
+        #fflag = wave < 60000.
+        #wave = wave[fflag]
+        #starm = starm[fflag]
+        #fflagu = wlumbra < 60000.
+        #umbram = umbram[fflagu]
 
         #penumbram = penumbram[fflagu]
 
@@ -365,28 +365,37 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
             wth, fth = np.loadtxt(thrfile4, unpack=True)
             wth*= 1e4
 
+        #fflag = np.logical_and(wth > wave.min(), wth < wave.max())
+        #wth = wth[fflag]
+        #fth = fth[fflag]
         starm = integ_filter(wth, fth, wave, starm)
         umbram = integ_filter(wth, fth, wlumbra, umbram)
+        if i != len(xobs) - 1:
+            starm = degrade_spec(starm, wth, xobs[:-1])
+            umbram = degrade_spec(umbram, wth, xobs[:-1])
+        else:
+            starm = np.zeros(len(starm)) + np.mean(starm)
+            umbram = np.zeros(len(umbram)) + np.mean(umbram)
         contrast = umbram/starm
         #contrastp = penumbram/starm
 
-        if i == 0:
-            chanleft = xobs[i]
-        elif i > 0 and i < len(xobs) - 2:
-            chanleft = (xobs[i] - 0.5*(xobs[i] - xobs[i - 1])) #* u.micrometer
-        else:
-            chanleft = xobs[0]
-        if i == len(xobs) - 2:
-            chanright = xobs[i]
-        elif i < len(xobs) - 2:
-            chanright = (xobs[i] + 0.5*(xobs[i + 1] - xobs[i])) #* u.micrometer
-        else:
-            chanright = xobs[-2]
-        wlcenter = np.mean([chanleft, chanright]) #* u.micrometer
-        #wlbin = np.logical_and(wl*1e-4 >= chanleft, wl*1e-4 <= chanright)
-        wlbin = np.logical_and(wth*1e-4 >= chanleft, wth*1e-4 <= chanright)
-        params[6] = 1. - np.mean(contrast[wlbin]) # Contrast spot 1
-
+        #if i == 0:
+        #    chanleft = xobs[i]
+        #elif i > 0 and i < len(xobs) - 2:
+        #    chanleft = (xobs[i] - 0.5*(xobs[i] - xobs[i - 1])) #* u.micrometer
+        #else:
+        #    chanleft = xobs[0]
+        #if i == len(xobs) - 2:
+        #    chanright = xobs[i]
+        #elif i < len(xobs) - 2:
+        #    chanright = (xobs[i] + 0.5*(xobs[i + 1] - xobs[i])) #* u.micrometer
+        #else:
+        #    chanright = xobs[-2]
+        #wlcenter = np.mean([chanleft, chanright]) #* u.micrometer
+        ##wlbin = np.logical_and(wl*1e-4 >= chanleft, wl*1e-4 <= chanright)
+        #wlbin = np.logical_and(wth*1e-4 >= chanleft, wth*1e-4 <= chanright)
+        #params[6] = 1. - np.mean(contrast[wlbin]) # Contrast spot 1
+        params[6] = 1. - contrast[i]
         rise.append(params[6])
         # Spot 2
         params[7] = params[4] - 2
@@ -399,10 +408,15 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #tt = np.arange(0., 0.4, 60.*1./86400.) # F star
         # Define in-transit/out-of-transit duration
         if pardict['tstar'] == 3500:
+            tt_ = np.arange(0.075 - 0.04, 0.125 + 0.04, 90./86400.)
             tt = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
         elif pardict['tstar'] == 5000:
+            tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 90./86400.)
             tt = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
-        transit = ksint_wrapper_fitcontrast.main(params, tt, fix_dict)
+        transit_ = ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
+        fitint = interp1d(tt_, transit_, bounds_error=False, \
+                        fill_value='extrapolate')
+        transit = fitint(tt)
         # White noise
         uncph = yobs_err[i]*len(tt)**0.5/2.
         transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
@@ -414,6 +428,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         plt.title('Channel: ' + str(round(xobs[i], 3)) + ' $\mu$m', fontsize=16)
         if i == len(xobs) - 1:
             i = -1
+
         plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
                         + '_' + pardict['observatory'] + '.pdf')
         savefile = open(pardict['data_folder'] + 'transit_spots' \
