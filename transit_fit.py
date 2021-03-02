@@ -87,13 +87,13 @@ def transit_emcee(diz, ind, bestbin):
     # Initial values
     kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, 1e-3, 0., 1.
     if diz['theta'] == 0.:
-        tspot_ = 0.09 #0.1
+        tspot_ = 0.095 #0.1
     else:
         if diz['tstar'] == 3500:
             if diz['instrument'] == 'NIRCam':
                 tspot_ = 0.115
             else:
-                tspot_ = 0.95 # This seems to work better for NIRSpec
+                tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
         else:
             tspot_ = 0.135 # 0.13
     A, wspot_ = 1e-3, 0.01

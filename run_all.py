@@ -8,6 +8,7 @@ import pickle
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+from scipy.interpolate import interp1d
 from pdb import set_trace
 
 def go(magstar, pardict, operation, models, res=10, fittype='grid', \
@@ -145,7 +146,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         mags = [4.5, 6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        #mags = np.array([11.5])
+        #mags = np.array([14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -171,7 +172,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 + '_theta' + str(int(ip['theta'])) + '.pdf'
         if os.path.isfile(checkf):
             return
-
+    '''
     dict_starmodel, dict_spotmodels \
                         = ingest_stellarspectra(tstar, tcontrast, loggstar)
     ip['starmodel'] = dict_starmodel
@@ -189,7 +190,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #tcontrast = np.array([-300.])
     elif tstar == 5000.:
         tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-1200.])
+        #tcontrast = np.array([-900.])
     if len(opers) > 0:
         for mag in mags:
             for td in tcontrast[::3]:
@@ -197,8 +198,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 pardict = go(mag, ip, opers, models, res=res, \
                             fittype=fittype, \
                             spotted_starmodel=spotted_starmodel)
-
-    plot_res(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
+    '''
+    plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #map_uncertainties(mags, tcontrast, ip)
     #plot_unc_results(instrum, ip)
 
@@ -223,7 +224,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
     elif inputpars['tstar'] == 5000:
         tcontrast = np.arange(-1200, 0, 300)
         size = 5.
-        #td = -1200.
+        td = -900.
     ip = inputpars
     xmag = mags
     ytdiff = tcontrast
@@ -234,7 +235,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
     tdiff_unc = np.zeros(len(xmag))
     sizes = np.arange(2, 6)
     cc = ['g', 'r', 'b', 'm', 'c', 'y']
-    fig, ax = plt.subplots(figsize=[12, 6])
+    fig, ax = plt.subplots()#figsize=[12, 6])
     axins = inset_axes(ax, width=3., height=3., loc=2)  #
     # draw a bbox of the region of the inset axes in the parent axes and
     # connecting lines between the bbox and the inset axes area
@@ -292,6 +293,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
                     #x, like = resdict[mag]['Tunc'][2], resdict[mag]['Tunc'][3]
                     spotSNR = resdict[mag]['Tunc'][-1]
                     print('Spot SNR = ', spotSNR)
+                    set_trace()
                     ax.plot(tcontrast[:-4], chi2r[:-4]/chi2r.min(), '.-', \
                                 label=str(mag), color=cc[ii])
                                 #label=str(round(spotSNR)), color=cc[ii], \
@@ -300,7 +302,8 @@ def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
                                 + 11.62/chi2r.min() + 1., color=cc[ii])
                     axins.plot(tcontrast[:-4], chi2r[:-4]/chi2r.min(), '.-', \
                                 label=str(mag), color=cc[ii])
-
+                    ax.plot(x, like, '.-', label=str(mag), color=cc[ii])
+                    ax.plot([td, td], [0., like.max()], 'k')
                             #label=str(round(spotSNR)), color=cc[ii], \
                             #markersize=size*2)
             tdiff_unc[i] = np.mean(uncT)
@@ -312,7 +315,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
         if chi2rplot:
             ax.text(-1100, 7, r'True $T_\mathrm{spot} - T_\mathrm{star}$', \
                             fontsize=14)
-            axins.text(-1100, 1.6, '$99.7\%$ CI', fontsize=14)
+            #axins.text(-1100, 1.6, '$99.7\%$ CI', fontsize=14)
             ax.legend(frameon=False, loc='upper right', fontsize=14, \
                         title='K mag', title_fontsize=14)
             axins.plot([td, td], [0., 10.], 'k--')
@@ -322,17 +325,18 @@ def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
             axins.set_xlim(x1, x2)
             axins.set_ylim(y1, y2)
             ax.set_xlabel(r'$T_\mathrm{spot} - T_\mathrm{star}$ [K]', fontsize=16)
-            ax.set_ylabel('$\chi^2/\chi^2_\mathrm{min}$', fontsize=16)
+            #ax.set_ylabel('$\chi^2/\chi^2_\mathrm{min}$', fontsize=16)
+            ax.set_ylabel('$Likelihood$', fontsize=16)
             ax.set_title(str(int(ip['tstar'])) + ' K star, ' \
                     + str(int(ip['tstar'] + td)) + r' K spot, $\theta=$' \
                     + str(int(ip['theta'])) + ' $\deg$, ' \
                     + ip['instrument'].replace('_', ' '), fontsize=16)
             plt.show()
+            plt.savefig(project_folder + instrument + 'star_' \
+                    + str(int(ip['tstar'])) + 'K/likelihood_map_' + mod + '_' + str(td) \
+                    #+ '_asizes' + str(int(ip['aumbra'])) \
+                    + '_theta' + str(int(ip['theta'])) + '.pdf')
             set_trace()
-            #plt.savefig(project_folder + instrument + 'star_' \
-            #        + str(int(ip['tstar'])) + 'K/chi2map_' + mod + '_' + str(td) \
-            #        + '_asizes' + str(int(ip['aumbra'])) \
-            #        + '_theta' + str(int(ip['theta'])) + '.pdf')
         plt.close('all')
         fig = plt.figure()
         ax = fig.add_axes([0.13, 0.13, 0.77, 0.77])
@@ -459,10 +463,15 @@ def ingest_stellarspectra(tstar, tcontrast, loggstar):
     dict_spotmodels = {}
     loggspot = format(loggstar - 0.5, '2.2e')
     moldefiles = glob.glob(josh_grid_folder + '*' + loggspot + '*')
-    for tc in tstar + tcontrast:
-        tc = format(tc, '2.2e')
-        filename = josh_grid_folder \
+    for tc_ in tstar + tcontrast:
+        tc = format(tc_, '2.2e')
+        if tc_ != 2900:
+            filename = josh_grid_folder \
             + 'starspots.teff=' + tc + '.logg=' + loggspot + '.z=0.0.irfout.csv'
+        else:
+            filename = josh_grid_folder + 'starspots.teff=' \
+               + tc + '.logg=' + loggspot + '.z=0.0.irfout3.FIXED.csv'
+
         dict_spotmodels[tc] = {}
         g = np.genfromtxt(filename, delimiter=',')
         mus = g[0][1:]
@@ -471,30 +480,162 @@ def ingest_stellarspectra(tstar, tcontrast, loggstar):
         dict_spotmodels[tc]['spec'] = []
         for j, mm in enumerate(mus):
             #if j == len(mus) - 1: # Take only mu = 1
+            # the spectrum at 2900 K has a different wl axis
             spec = [g[i][j + 1] for i in range(2, len(g))]
+            if tc_ == 2900.:
+                modint = interp1d(dict_spotmodels[tc]['wl'], spec, \
+                        bounds_error=False, fill_value='extrapolate')
+                spec = modint(dict_starmodel['wl'])
+                # Replace wl axis just once
+                if j == len(mus) - 1:
+                    dict_spotmodels[tc]['wl'] = np.copy(dict_starmodel['wl'])
             dict_spotmodels[tc]['spec'].append(np.array(spec))
 
     return dict_starmodel, dict_spotmodels
 
+def plot_res2(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
+    '''
+    Build a 2d plot containing stellar mag, t diff input as axes and
+    tdiff_output as color.
+    '''
+
+    #mag = 10.5
+    # Arrays for resolution. Here we are just renaming
+    if models == 'josh':
+        tcontrast = tcontrast[::3]
+    if inputpars['tstar'] == 3500:
+        tcontrast = np.arange(-900, 0, 300)
+        td = -600.
+        size = 3.
+    elif inputpars['tstar'] == 5000:
+        tcontrast = np.arange(-1200, 0, 300)
+        size = 5.
+        #td = -1200.
+    ip = inputpars
+    xmag = mags
+    ytdiff = tcontrast
+    #if chi2rplot:
+    #    xmag = [4.5]
+    #    ytdiff = [td]
+    tdiff_output = np.zeros((len(xmag), len(ytdiff)))
+    tdiff_unc = np.zeros(len(xmag))
+    sizes = np.arange(2, 6)
+    cc = ['g', 'r', 'b', 'm', 'c', 'y']
+    #axins = inset_axes(ax, width=3., height=3., loc=2)  #
+    # draw a bbox of the region of the inset axes in the parent axes and
+    # connecting lines between the bbox and the inset axes area
+    #mark_inset(ax, axins, loc1=3, loc2=4, fc="none", ec="0.5")
+    #plt.xticks(visible=False)
+    #plt.yticks(visible=False)
+    for mod in [models]:
+        for j, td in enumerate(tcontrast): #td
+            fig, ax = plt.subplots()#figsize=[12, 6])
+            #for i, size in enumerate(sizes):
+            uncT = []
+            diffT = [] # This is for the 2D plot
+            for i, mag in enumerate(mags):
+                ii = np.copy(i)
+                i = 0
+                tumbra = ip['tstar'] + td
+                homedir = os.path.expanduser('~')
+                project_folder = homedir + '/Projects/jwst_spots/revision1/'
+                instrument = ip['instrument'] + '/'
+                chains_folder = project_folder + instrument + 'star_' \
+                    + str(int(ip['tstar'])) + 'K/p' \
+                    + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
+                    + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
+                    + '_spot' + str(int(ip['tstar'] + td)) \
+                    + '_i' + str(int(ip['incl'])) \
+                    + '_a' + str(int(size)) \
+                    + '_theta' + str(int(ip['theta'])) \
+                    + '_mag' + str(mag) + '/MCMC/'
+                try:
+                    resfile = open(chains_folder + 'contrast_res_' \
+                            + mod + '_' + fittype + '.pic', 'rb')
+                    resdict = pickle.load(resfile)
+                    resfile.close()
+                    tbest = sorted(zip(resdict[mag][mod].items()), \
+                                    key=lambda x: x[0][1])[0][0][0]
+                    #tdiff_output[i, j] = -(td - tbest)/(ip['tstar'] + td)*100
+                    #tdiff_output_abs[i, j] = abs(td - tbest)/(ip['tstar'] + td)*100
+                    #tdiff_output[i, j] = -(td - tbest)
+                    #tdiff_output[ii, j] = resdict[mag]['Tunc'][0]
+                    #if tdiff_output[ii, j] < 0:
+                    #    tdiff_output[ii, j] /= resdict[mag]['Tunc'][1][0]
+                    #else:
+                    #    tdiff_output[ii, j] /= resdict[mag]['Tunc'][1][1]
+                    tdiff_output[ii, j] = resdict[mag]['Tunc'][1][1] \
+                                - resdict[mag]['Tunc'][1][0]
+                    #                - (ip['tstar'] + td)
+                    diffT.append(abs(resdict[mag]['Tunc'][4]))
+                    uncT.append(resdict[mag]['Tunc'][3])
+                    if np.isnan(tdiff_output[i, j]) \
+                                or tdiff_output[i, j] == np.inf:
+                        tdiff_output[i, j] = 10000
+                except FileNotFoundError:
+                    tdiff_output[i, j] = -999
+                if chi2rplot:
+                    #chi2r = resdict[mag]['Tunc'][-2]
+                    x, like = resdict[mag]['Tunc'][2], resdict[mag]['Tunc'][3]
+                    #like = -2.*np.log(like)
+                    spotSNR = resdict[mag]['Tunc'][-1]
+                    print('Spot SNR = ', spotSNR)
+                    ax.plot(x, like, '.-', label=str(mag), \
+                                    color=cc[ii])
+                    ax.plot([td, td], [0., 0.07], 'k')
+                            #label=str(round(spotSNR)), color=cc[ii], \
+                            #markersize=size*2)
+            #tdiff_unc[i] = np.mean(uncT)
+            #plt.figure(33)
+            #plt.plot(tcontrast, diffT, 'o-', c=cc[i], label=str(mag))
+            #ax.text(-1100, 7, r'True $T_\mathrm{spot} - T_\mathrm{star}$', \
+            #                fontsize=14)
+            #axins.text(-1100, 1.6, '$99.7\%$ CI', fontsize=14)
+            ax.legend(frameon=False, loc='best', fontsize=14, \
+                        title='K mag', title_fontsize=14)
+            #axins.plot([td, td], [0., 10.], 'k--')
+            #ax.text(-300., 28., 'K mag', fontsize=14)
+            #x1, x2, y1, y2 = -1200., -100., 0.9, 3.
+            #axins.yaxis.tick_right()
+            #ax.set_ylim(0, 5)
+            #axins.set_ylim(y1, y2)
+            ax.set_xlabel(r'$T_\mathrm{spot} - T_\mathrm{star}$ [K]', fontsize=16)
+            #ax.set_ylabel('$\chi^2/\chi^2_\mathrm{min}$', fontsize=16)
+            #ax.set_ylabel('$\mathcal{L}/\mathcal{L}_\mathrm{max}$', fontsize=16)
+            ax.set_ylabel('$\mathcal{L}$', fontsize=16)
+            ax.set_title(str(int(ip['tstar'])) + ' K star, ' \
+                    + str(int(ip['tstar'] + td)) + r' K spot, $\theta=$' \
+                    + str(int(ip['theta'])) + ' $\deg$, ' \
+                    + ip['instrument'].replace('_', ' '), fontsize=16)
+            plt.savefig(project_folder + instrument + 'star_' \
+                    + str(int(ip['tstar'])) + 'K/likelihood_map_' \
+                    + ip['instrument'] \
+                    + '_' + mod + '_' + str(ip['tstar']) + '_' + str(td) \
+                    #+ '_asizes' + str(int(ip['aumbra'])) \
+                    + '_theta' + str(int(ip['theta'])) + '.pdf')
+            plt.close('all')
+
+    return
+
 def main():
 
-    for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):
+    for m, instrum in enumerate(['NIRSpec_Prism']):
         #for i, asize in enumerate([3.]):
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([40., 0.]): # mu angle 40.
+            for k, theta in enumerate([40.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
                 #if ~np.logical_and.reduce((i == 0, j == 0, k == 0, m == 0)):
-                cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                    simulate_transits=False, fit_transits=False, \
-                    fit_spectra=True, spotted_starmodel=False, \
-                    inputpars=inputpars, update=False, chi2rplot=False)
+                #cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                #    simulate_transits=False, fit_transits=False, \
+                #    fit_spectra=True, spotted_starmodel=False, \
+                #    inputpars=inputpars, update=False, chi2rplot=True)
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
                     simulate_transits=False, fit_transits=False, \
                     fit_spectra=True, spotted_starmodel=False, \
-                    inputpars=inputpars, update=False, chi2rplot=False)
+                    inputpars=inputpars, update=False, chi2rplot=True)
 
     return
 

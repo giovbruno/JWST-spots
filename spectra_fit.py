@@ -93,10 +93,12 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     global wlmaxPrism
     global wlminNIRCam
     global wlmaxNIRCam
-    wlminPrism = 1.0
-    wlmaxPrism = 1.8
-    wlminNIRCam = 1.0
-    wlmaxNIRCam = 1.8
+    #wlminPrism = 2.4
+    #wlmaxPrism = 2.6
+    wlminPrism = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] - 0.1#0.6
+    wlmaxPrism = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] + 0.1#0.8
+    wlminNIRCam = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] - 0.1#3.8
+    wlmaxNIRCam = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] + 0.1#4.0
     if pardict['instrument'] == 'NIRSpec_Prism':
         wref = np.logical_and(wlminPrism < wl, wl < wlmaxPrism)
     elif pardict['instrument'] == 'NIRCam':
@@ -145,9 +147,9 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
             # interpolate with that and wl grid, and produce new spectrum
             zz = RectBivariateSpline(wl_, tspot_, np.array(mat).T)
             if pardict['tstar'] == 3500:
-                tspot_ = np.arange(2300, pardict['tstar'] - 100, 25)
+                tspot_ = np.arange(2300, pardict['tstar'] - 75, 25)
             else:
-                tspot_ = np.arange(3600, pardict['tstar'] - 100, 25)
+                tspot_ = np.arange(3600, pardict['tstar'] - 75, 25)
             chi2r = np.zeros(len(tspot_)) + np.inf
             likelihood = np.zeros(len(tspot_)) - np.inf
 
@@ -176,23 +178,30 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
                 model = []
             ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, \
                     wl, res=res, isplot=False, model=model)
-
             specint = interp1d(ww, spec, bounds_error=False, \
                             fill_value='extrapolate')
             specA = specint(wl)
 
-            boundsm = ([-10, 10])
-            soln = least_squares(scalespec, [0.], \
+            #boundsm = ([-10, 10])
+            boundsm = ([-10., 0.], [10., 10.])
+            soln = least_squares(scalespec2, [0., 1.], \
                         bounds=boundsm, args=(specA, A, yerrup, yerrdown))
+            #boundsm = ([0., 10])
+            #soln = least_squares(multspec, [1.], \
+            #            bounds=boundsm, args=(specA, A, yerrup, yerrdown))
+            #soln.x[0] = 0.
             if i % 4 == 0:
-                plt.plot(wl, specA + soln.x[0], label=str(int(temp)) + ' K')
+                plt.plot(wl, specA, label=str(int(temp)) + ' K')
+            #if i % 4 == 0:
+            #    plt.plot(wl, specA * soln.x[0], label=str(int(temp)) + ' K')
             # Save true value
             if temp == pardict['tumbra']:
                 trueval = np.copy(i)
-            chi2 = np.sum(scalespec(soln.x, specA, A, yerrup, yerrdown))
+            chi2 = np.sum(scalespec2(soln.x, specA, A, yerrup, yerrdown))
+            #chi2 = np.sum(multspec(soln.x, specA, A, yerrup, yerrdown))
                 #        /(len(A) - 1)
-            print(temp, 'K, spectrum shifting factor:', soln.x[0], \
-                    'chi2r:', chi2/(len(A) - 2))
+            #print(temp, 'K, spectrum shifting factor:', soln.x[0], \
+            print(temp, 'K, chi2r:', chi2/(len(A) - 2))
             #plt.plot(wl, specA, label=str(int(temp)) + ' K')
             #chi2 = np.sum(scalespec([0.], specA, A, yerrup, yerrdown)) \
             #            /(len(A) - 1)
@@ -318,7 +327,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     #        = [tspot_[xmin] - tspot_[trueval], Tsigma, distchi2, xsigma, \
     #            min(chi2r)/(len(A) - 2), chi2r, spotSNR, Trange]
     dict_results[pardict['magstar']]['Tunc'] \
-            = [dist, Tconf, x, prob, 0, 0, spotSNR]
+            = [dist, Tconf, x, prob, 0, 0, spotSNR, chi2r]
     if dist < 0:
         zz = dist/Tconf[0]
     else:
@@ -370,6 +379,28 @@ def scalespec(x, spec, y, yerrup, yerrdown):
     flag = spec + x[0] >= y
     res[flag] = (spec + x[0] - y)[flag]**2/yerrup[flag]**2
     res[~flag] = (spec + x[0] - y)[~flag]**2/yerrdown[~flag]**2
+
+    return res
+
+def scalespec2(x, spec, y, yerrup, yerrdown):
+    '''
+    Distance between model spectrum and data (with unequal uncertainties).
+    '''
+    res = np.zeros(len(y))
+    flag = spec*x[1] + x[0] >= y
+    res[flag] = (spec*x[1] + x[0] - y)[flag]**2/yerrup[flag]**2
+    res[~flag] = (spec*x[1] + x[0] - y)[~flag]**2/yerrdown[~flag]**2
+
+    return res
+
+def multspec(x, spec, y, yerrup, yerrdown):
+    '''
+    Distance between model spectrum and data (with unequal uncertainties).
+    '''
+    res = np.zeros(len(y))
+    flag = spec * x[0] >= y
+    res[flag] = (spec * x[0] - y)[flag]**2/yerrup[flag]**2
+    res[~flag] = (spec * x[0] - y)[~flag]**2/yerrdown[~flag]**2
 
     return res
 
@@ -542,7 +573,8 @@ def compare_pysynphot_phoenix():
     plt.show()
     return
 
-def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1):
+def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1, \
+                wlrefmin=1.0, wlrefmax=1.2):
     '''
     Compare stellar spectra to black body curves.
     mu works only for Josh's models
@@ -568,7 +600,8 @@ def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1):
         mus = g[0][1:]
         wl = np.array([g[i][0] for i in range(2, len(g))])
         starflux = np.array([g[i][mu] for i in range(2, len(g))])
-
+        plt.figure(2)
+        plt.plot(wl*1e-4, starflux, label=str(tstar) + ' K')
     wnew = np.linspace(0.6, 5.3, 100)
     starflux = degrade_spec(starflux, wl, wnew)
 
@@ -582,17 +615,30 @@ def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1):
         elif modgrid == 'josh':
             tspot_ = format(ti, '2.2e')
             loggspot_ = format(loggstar - 0.5, '2.2e')
-            filename = josh_grid_folder + 'starspots.teff=' \
+            if ti != 2900.:
+                filename = josh_grid_folder + 'starspots.teff=' \
                         + tspot_ + '.logg=' + loggspot_ + '.z=0.0.irfout.csv'
-            g = np.genfromtxt(filename, delimiter=',')
+                g = np.genfromtxt(filename, delimiter=',')
+                wl2 = np.copy(wl)
+            else:
+                filename = josh_grid_folder + 'starspots.teff=' \
+                   + tspot_ + '.logg=' + loggspot_ + '.z=0.0.irfout3.FIXED.csv'
+                g = np.genfromtxt(filename, delimiter=',')
+                wl2 = np.array([g[i][0] for i in range(2, len(g))])
             spotflux = np.array([g[i][mu] for i in range(2, len(g))])
-        spotflux = degrade_spec(spotflux, wl, wnew)
-        wref = np.logical_and(4.6 < wnew, wnew < 5.0)
+            plt.figure(2)
+            plt.plot(wl2*1e-4, spotflux, label=str(ti) + ' K')
+            plt.ylabel(r'Flux [some units]', fontsize=14)
+        if ti != 2900.:
+            spotflux = degrade_spec(spotflux, wl, wnew)
+        else:
+            spotflux = degrade_spec(spotflux, wl2, wnew)
+        wref = np.logical_and(wlrefmin < wnew, wnew < wlrefmax)
         spotref = spotflux[wref]
         starref = starflux[wref]
         fref = 1. - np.mean(spotref/starref)
-        rise = (1. - spotflux/starflux)/fref \
-                                        + np.mean(spotflux[wref]/starflux[wref])
+        rise = (1. - spotflux/starflux)/fref
+                            #+ np.mean(spotflux[wref]/starflux[wref])
         bspot = bb.blackbody_lambda(wl, ti)
         bstar = bb.blackbody_lambda(wl, tstar)
         wref = np.logical_and(46000. < wl, wl < 50000)
@@ -600,18 +646,30 @@ def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1):
         contrast = (1. - bspot/bstar)/cref \
                                 + np.mean(spotref/starref)
         #                        + np.mean(bspot[wref]/bstar[wref]).value
+        plt.figure(1)
         plt.plot(wnew, rise, label=str(ti) + ' K')
-        plt.plot(wl*1e-4, contrast, 'k', alpha=0.5)
-
-    plt.xlim(0.6, 5.2)
-    #plt.ylim(0., 0.95)
-    plt.xlabel(r'Wavelength [$\mu$m]', fontsize=14)
-    plt.ylabel(r'Brightness contrast at $\mu=1$', fontsize=14)
-    plt.title('$T_\star=$ ' + str(tstar) + ' K', fontsize=16)
-    plt.legend(frameon=False)
+        #if ti == tspot[-1]:
+        #    plt.plot(wl*1e-4, contrast, 'k', alpha=0.5, \
+        #                                label='Corresponding black body curves')
+        #else:
+        #    plt.plot(wl*1e-4, contrast, 'k', alpha=0.5)
+        plt.ylabel(r'Brightness contrast at $\mu=1$', fontsize=14)
+    for j in [1, 2]:
+        plt.figure(j)
+        plt.xlim(0.6, 5.2)
+        #plt.ylim(0., 0.95)
+        plt.xlabel(r'Wavelength [$\mu$m]', fontsize=14)
+        plt.title('$T_\star=$ ' + str(tstar) + ' K', fontsize=16)
+        leg = plt.legend(frameon=False)
+        #vp = leg._legend_box._children[-1]._children[0]
+        #for c in vp._children:
+        #    c._children.reverse()
+        #    vp.align="right"
     plt.show()
+    plt.figure(1)
     plt.savefig('/home/giovanni/Projects/jwst_spots/contrast_model_' \
-                + str(tstar) + '_mu.pdf')
+                 + str(tstar) + '_mu_' + str(wlrefmin) + '-' + str(wlrefmax) \
+                + '.pdf')
 
     return
 
