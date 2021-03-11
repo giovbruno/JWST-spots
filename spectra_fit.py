@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d, RectBivariateSpline
+from scipy.interpolate import RegularGridInterpolator as rgi
 from scipy.optimize import least_squares
 from scipy import stats
 import pysynphot
@@ -13,6 +14,10 @@ from astropy.modeling import blackbody as bb
 from simulate_transit import degrade_spec, integ_filter
 from run_all import ingest_stellarspectra
 import os
+import sys
+sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
+import emcee
+import cornerplot
 
 homef = os.path.expanduser('~')
 modelsfolder = homef + '/Shelf/stellar_models/phxinten/HiRes/'
@@ -26,7 +31,7 @@ thrfile4 = foldthrough + 'JWST_NIRSpec.CLEAR.dat'
 plt.ioff()
 
 def read_res(pardict, plotname, resfile, models, fittype='grid', \
-            resol=10, interpolate=True):
+            resol=10, interpolate=True, LM=True):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
@@ -53,7 +58,8 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     bestbin = -1
     wl, A, x0, sigma = [], [], [], []
     yerrup, yerrdown = [], []
-    kr, krunc = [], []
+    #kr, krunc = [], []
+    global kr
     for i in np.concatenate((np.arange(expchan - 1), [-1])):
         #if i < expchan - 1:
         ffopen = open(pardict['chains_folder'] + 'chains_' \
@@ -65,6 +71,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
             tspot = res['Percentiles'][0][-2]
         else:
             perc = res['Percentiles'][0][-1]
+            kr = res['Percentiles'][0][0][2]
         A.append(perc[2])
         yerrup.append(perc[3] - perc[2])
         yerrdown.append(perc[2] - perc[1])
@@ -75,6 +82,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     # Take mean value for spot position
     #tspot = tspot[2]
     # Get **observed** mid-transit time
+    print('kr =', kr)
     mufit = pardict['muindex']
     wl = np.array(wl)
     if pardict['instrument'] == 'NIRCam':
@@ -93,10 +101,10 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     global wlmaxPrism
     global wlminNIRCam
     global wlmaxNIRCam
-    #wlminPrism = 2.4
-    #wlmaxPrism = 2.6
-    wlminPrism = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] - 0.1#0.6
-    wlmaxPrism = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] + 0.1#0.8
+    wlminPrism = 0.6
+    wlmaxPrism = 5.3
+    #wlminPrism = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] - 0.1#0.6
+    #wlmaxPrism = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] + 0.1#0.8
     wlminNIRCam = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] - 0.1#3.8
     wlmaxNIRCam = wl[np.mean([yerrdown, yerrup], axis=0).argmin()] + 0.1#4.0
     if pardict['instrument'] == 'NIRSpec_Prism':
@@ -108,9 +116,9 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     #yerrup /= Aref
     #yerrdown /= Aref
     yerrmed = np.std(A[wref])/((np.sum(wref))**0.5)
-    yerrup = np.sqrt(A**2/Aref**4*yerrmed**2 + yerrup**2/Aref**2)
-    yerrdown = np.sqrt(A**2/Aref**4*yerrmed**2 + yerrdown**2/Aref**2)
-    A = A/Aref #+ Aref
+    #yerrup = np.sqrt(A**2/Aref**4*yerrmed**2 + yerrup**2/Aref**2)
+    #yerrdown = np.sqrt(A**2/Aref**4*yerrmed**2 + yerrdown**2/Aref**2)
+    #A = A/Aref #+ Aref
     res = np.diff(wl)[0]
 
     # Remove points with too low error bars
@@ -140,12 +148,23 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
         if models == 'josh' and interpolate:
             mat = []
             # interpolate models, make finer grid
+            #if not LM:
             for ti in tspot_:
                 tt = format(ti, '2.2e')
                 wl_ = pardict['spotmodels'][tt]['wl']
                 mat.append(pardict['spotmodels'][tt]['spec'][pardict['muindex']])
             # interpolate with that and wl grid, and produce new spectrum
             zz = RectBivariateSpline(wl_, tspot_, np.array(mat).T)
+            #else:
+            #    # Interpolate in mu too
+            #    mu_ = pardict['starmodel']['mus']
+            #    for ti in tspot_:
+            #        for mui, _ in enumerate(mu_):
+            #            tt = format(ti, '2.2e')
+            #            wl_ = pardict['spotmodels'][tt]['wl']
+            #            mat.append(pardict['spotmodels'][tt]['spec'][mui])
+            #    mat = np.array(mat).reshape(len(tspot_), len(mu_), len(wl_))
+            #    zz = rgi((tspot_, mu_, wl_), mat)
             if pardict['tstar'] == 3500:
                 tspot_ = np.arange(2300, pardict['tstar'] - 75, 25)
             else:
@@ -169,55 +188,78 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
         #            /(len(A) - 2)
         #yerrup *= chi2r_**0.5
         #yerrdown *= chi2r_**0.5
-        for i, temp in enumerate(tspot_):
-            if temp == pardict['tstar']:
-                continue
-            if interpolate:
-                model = zz(wl_, temp)
-            else:
-                model = []
-            ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, \
-                    wl, res=res, isplot=False, model=model)
-            specint = interp1d(ww, spec, bounds_error=False, \
-                            fill_value='extrapolate')
-            specA = specint(wl)
+        if not LM:
+            for i, temp in enumerate(tspot_):
+                if temp == pardict['tstar']:
+                    continue
+                if interpolate:
+                    model = zz(wl_, temp)
+                else:
+                    model = []
+                ww, spec = combine_spectra(pardict, [temp], 0.05, stmod, \
+                        wl, res=res, isplot=False, model=model)
+                specint = interp1d(ww, spec, bounds_error=False, \
+                                fill_value='extrapolate')
+                specA = specint(wl)
+                if pardict['tstar'] == 5000:
+                    boundsm = ([0., 0.01])
+                elif pardict['tstar'] == 3500:
+                    boundsm = ([0., 0.01])
+                #boundsm = ([-10., 0.], [10., 10.])
+                soln = least_squares(multspec, [1e-3], \
+                            bounds=boundsm, args=(specA, A, yerrup, yerrdown))
+                #boundsm = ([0., 10])
+                #soln = least_squares(multspec, [1.], \
+                #            bounds=boundsm, args=(specA, A, yerrup, yerrdown))
+                #soln.x[0] = kr**2
+                #if i % 4 == 0:
+                #    plt.plot(wl, specA, label=str(int(temp)) + ' K')
+                if i % 8 == 0:
+                    plt.plot(wl, specA * soln.x[0], label=str(int(temp)) + ' K')
+                # Save true value
+                if temp == pardict['tumbra']:
+                    trueval = np.copy(i)
+                chi2 = np.sum(multspec(soln.x, specA, A, yerrup, yerrdown))
+                #chi2 = np.sum(multspec(soln.x, specA, A, yerrup, yerrdown))
+                    #        /(len(A) - 1)
+                print(temp, 'K, spectrum scaling factor:', soln.x[0], \
+                                'chi2r:', chi2/(len(A) - 1))
+                #print(temp, 'K, chi2r:', chi2/(len(A) - 2))
+                #plt.plot(wl, specA, label=str(int(temp)) + ' K')
+                #chi2 = np.sum(scalespec([0.], specA, A, yerrup, yerrdown)) \
+                #            /(len(A) - 1)
+                chi2r[i] = chi2
+                likelihood[i] = np.exp(-0.5*chi2)
+                #likelihood[i] = np.prod(np.exp(-0.5*scalespec(soln.x, \
+                #                specA, A, yerrup, yerrdown)))
+                dict_results[pm][stmod][temp - pardict['tstar']] = likelihood[i]
+        else:
+            # In
+            #mat = []
+            # interpolate models, make finer grid
+            #for ti in tspot_:
+            #    tt = format(ti, '2.2e')
+            #    wl_ = pardict['spotmodels'][tt]['wl']
+            #    mat.append(pardict['spotmodels'][tt]['spec'][pardict['muindex']])
+            ## interpolate with that and wl grid, and produce new spectrum
+            #zz = RectBivariateSpline(wl_, tspot_, np.array(mat).T)
 
-            #boundsm = ([-10, 10])
-            boundsm = ([-10., 0.], [10., 10.])
-            soln = least_squares(scalespec2, [0., 1.], \
-                        bounds=boundsm, args=(specA, A, yerrup, yerrdown))
-            #boundsm = ([0., 10])
-            #soln = least_squares(multspec, [1.], \
-            #            bounds=boundsm, args=(specA, A, yerrup, yerrdown))
-            #soln.x[0] = 0.
-            if i % 4 == 0:
-                plt.plot(wl, specA, label=str(int(temp)) + ' K')
-            #if i % 4 == 0:
-            #    plt.plot(wl, specA * soln.x[0], label=str(int(temp)) + ' K')
-            # Save true value
-            if temp == pardict['tumbra']:
-                trueval = np.copy(i)
-            chi2 = np.sum(scalespec2(soln.x, specA, A, yerrup, yerrdown))
-            #chi2 = np.sum(multspec(soln.x, specA, A, yerrup, yerrdown))
-                #        /(len(A) - 1)
-            #print(temp, 'K, spectrum shifting factor:', soln.x[0], \
-            print(temp, 'K, chi2r:', chi2/(len(A) - 2))
-            #plt.plot(wl, specA, label=str(int(temp)) + ' K')
-            #chi2 = np.sum(scalespec([0.], specA, A, yerrup, yerrdown)) \
-            #            /(len(A) - 1)
-            chi2r[i] = chi2
-            likelihood[i] = np.exp(-0.5*chi2)
-            #likelihood[i] = np.prod(np.exp(-0.5*scalespec(soln.x, \
-            #                specA, A, yerrup, yerrdown)))
-            dict_results[pm][stmod][temp - pardict['tstar']] = likelihood[i]
-
+            boundsm = ([3600, 0.0, 0.0], [5000., 0.5, 1.0])
+            soln = least_squares(spec_res, [4000., 1e-4, 1e-4], bounds=boundsm, \
+                    args=(A, yerrup, yerrdown, wl, zz, pardict))
+            print('Best sol:', soln.x)
+            # Let's run an MCMC
+            res = mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict)
+            plt.plot(wl, compute_deltaf_f(soln.x[0], soln.x[1], soln.x[2], \
+                        wlobs, zz, pardict)
         plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
-        plt.ylabel(r'$\Delta f(\lambda)/\Delta f(\lambda_0)$', \
+        #plt.ylabel(r'$\Delta f(\lambda)/\Delta f(\lambda_0)$', \
+        plt.ylabel(r'$\Delta f(\lambda)$', \
                     fontsize=16)
         maxL = np.argmax(likelihood)
         print('L max =', likelihood[maxL], 'with Tspot =', \
                                     tspot_[maxL], 'K')
-        plt.title(pardict['instrument'] \
+        plt.title('True value: ' + str(int(pardict['tumbra'])) + ' K' \
            + r', best fit: $T_\bullet=$' + str(int(tspot_[maxL])) + ' K', \
             fontsize=16)
         plt.xlim(wl.min() - 0.2, wl.max() + 0.2)
@@ -426,9 +468,10 @@ def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
             star = pysynphot.Icat(stmodel, pardict['tstar'], 0.0, \
                     pardict['loggstar']).flux
         elif stmodel == 'josh':
-            star = pardict['starmodel']['spec'][pardict['muindex']]
+            # Both intensity and flux are needed
+            i_star = pardict['starmodel']['spec'][pardict['muindex']]
             wave = pardict['starmodel']['wl']
-
+            f_star = np.sum(pardict['starmodel']['spec'], axis=0)
     else:
         wave, star = np.loadtxt(pardict['data_folder'] \
                     + 'spotted_star.dat', unpack=True)
@@ -442,12 +485,13 @@ def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
         wth3, fth3 = np.loadtxt(thrfile3, unpack=True)
         wth = np.concatenate((wth1, wth2, wth3))
         fth = np.concatenate((fth1, fth2, fth3))
-    star = integ_filter(wth, fth, wave, star)
+    #i_star = integ_filter(wth, fth, wave, i_star)
+    #f_star = integ_filter(wth, fth, wave, f_star)
     #fflag = wth < 60000.
     #wth = wth[fflag]
     #fth = fth[fflag]
     #star = star[fflag]
-    rebstar = degrade_spec(star, wth, wnew)
+    #rebstar = degrade_spec(i_star, wth, wnew)
     for i in tspot:
         if stmodel == 'ck04models' or stmodel == 'phoenix':
             wls = pysynphot.Icat(stmodel, i, 0.0, \
@@ -458,26 +502,33 @@ def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
             tspot_ = format(i, '2.2e')
             wls = np.copy(wave)#pardict['spotmodels'][tspot_]['wl']
             if np.shape(model) == (0.,):
-                spot = pardict['spotmodels'][tspot_]['spec'][pardict['muindex']]
+                i_spot = pardict['spotmodels'][tspot_]['spec'][pardict['muindex']]
             else:
-                spot = np.hstack(model)
+                i_spot = np.hstack(model)
+            f_spot = np.sum(pardict['spotmodels'][tspot_]['spec'], axis=0)
         #fflagu = wls < 60000.
         #wls = wls[fflagu]
         #spot = spot[fflagu]
-        spot = integ_filter(wth, fth, wls, spot)
-        rebnew = degrade_spec(spot, wth, wnew)
+        #i_spot = integ_filter(wth, fth, wls, i_spot)
+        #f_spot = integ_filter(wth, fth, wls, f_spot)
+        #rebnew = degrade_spec(spot, wth, wnew)
+
+        idiff = integ_filter(wth, fth, wls, i_star - i_spot)
+        deltaf_f = (i_star - i_spot)/(f_star*(1. - ffact) + ffact*f_spot)
+        f_star_spot = integ_filter(wth, fth, wls, deltaf_f)
+        deltaf_f = degrade_spec(idiff/f_star_spot, wth, wnew)
 
         # As Sing+2011
         if pardict['instrument'] == 'NIRSpec_Prism':
             wref = np.logical_and(wlminPrism < wnew, wnew < wlmaxPrism)
         elif pardict['instrument'] == 'NIRCam':
             wref = np.logical_and(wlminNIRCam < wnew, wnew < wlmaxNIRCam)
-        spotref = rebnew[wref]
-        starref = rebstar[wref]
-        fref = 1. - np.mean(spotref/starref)
-        rise = (1. - rebnew/rebstar)/fref #+ Aref
+        #spotref = rebnew[wref]
+        #starref = rebstar[wref]
+        #fref = 1. - np.mean(spotref/starref)
+        #rise = (1. - rebnew/rebstar)#/fref #+ Aref
         #rise = degrade_spec(rise, wth, wnew)
-
+        rise = deltaf_f[wref]
         if isplot:
             plt.plot(wnew, rise, label=r'$T_{\mathrm{eff}, \bullet}$ = '\
                         + str(i) + 'K')
@@ -488,7 +539,7 @@ def combine_spectra(pardict, tspot, ffact, stmodel, wnew, \
         plt.ylabel('Flux rise [Relative values]', fontsize=16)
 
     flag = np.logical_or(np.isnan(wnew), np.isnan(rise))
-
+    set_trace()
     return wnew[~flag], rise[~flag]
 
 def plot_precision(pardict, xaxis, deltapar):
@@ -752,4 +803,211 @@ def compare_specific_intensity(tstar, tcontrast, loggstar, muindex):
 
     plt.show()
     set_trace()
-    retur
+    return
+
+def compute_deltaf_f(tspot, ffact, beta, wlobs, zz, pardict):
+    '''
+    Compute normalized flux variation during starspot occultation.
+
+    Input
+    -----
+    ffact: starspot filling factor
+    beta: fraction of planetary surface occulting the starspot
+    '''
+
+    # Both intensity and flux are needed
+    muspot = pardict['starmodel']['mus'][pardict['muindex']]
+    i_star = pardict['starmodel']['spec'][pardict['muindex']]
+    wave = pardict['starmodel']['wl']
+    f_star = 2.*np.sum(np.transpose(pardict['starmodel']['spec']) \
+        *pardict['starmodel']['mus'], axis=1) \
+        - 2.*np.transpose(pardict['starmodel']['spec'][pardict['muindex']]) \
+                *muspot \
+        + pardict['starmodel']['spec'][pardict['muindex']]*muspot*(2.-ffact)
+
+    # Spot specific intensity from interpolation
+    #pts = np.array([[np.zeros(len(wave)) + tspot], \
+    #                    [np.zeros(len(wave)) + pardict['muindex']], [wave]])
+    i_spot = np.hstack(zz(wave, tspot))
+    f_spot = i_spot*muspot*ffact
+
+    #i_spot = zz(pts.T)
+    #tspot_ = format(tspot, '2.2e')
+    wls = np.copy(wave)#pardict['spotmodels'][tspot_]['wl']
+    # Compute spot flux from interpolation
+    #f_spot = np.sum(pardict['spotmodels'][tspot_]['spec'], axis=0)
+    #f_spot = np.zeros(len(wave))
+    #for mui in mus:
+    #    pts = np.array([[np.zeros(len(wave)) + tspot], \
+    #                    [np.zeros(len(wave)) + mui], [wave]])
+    #    f_spot = zz(pts.T)
+
+    #f_spot = np.sum(zz)
+    if pardict['instrument'] == 'NIRSpec_Prism':
+        wth, fth = np.loadtxt(thrfile4, unpack=True)
+        wth*= 1e4
+    elif pardict['instrument'] == 'NIRCam':
+        wth1, fth1 = np.loadtxt(thrfile1, unpack=True)
+        wth2, fth2 = np.loadtxt(thrfile2, unpack=True)
+        wth3, fth3 = np.loadtxt(thrfile3, unpack=True)
+        wth = np.concatenate((wth1, wth2, wth3))
+        fth = np.concatenate((fth1, fth2, fth3))
+
+    idiff = integ_filter(wth, fth, wls, i_star - i_spot)
+    #f_star_spot = f_star*(1. - ffact) + ffact*f_spot
+    # Multiply by common factor
+    if pardict['tstar'] == 5000:
+        Rstar = 0.8*6.957e8
+    elif pardict['tstar'] == 3500:
+        Rstar = 0.45*6.957e8
+    factor = 2.*np.pi*Rstar**2/len(pardict['starmodel']['mus'])
+    f_star_spot = integ_filter(wth, fth, wls, (f_star + f_spot)*factor)
+    # Only keep values within filters curves
+    wlfl = np.logical_and(wth >= min(wave), wth <= max(wave))
+    idiff = idiff[wlfl]
+    f_star_spot = f_star_spot[wlfl]
+    wth = wth[wlfl]
+    #wth =
+    #modint = interp1d(wl, f_star_spot)
+    #deltaf_f = modint(w)
+    deltaf_f = degrade_spec(idiff/f_star_spot, wth, wlobs)
+    deltaf_f *= beta*np.pi*(kr*Rstar)**2
+
+    return deltaf_f
+
+def spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict):
+    '''
+    Compute squared residuals from model spectrum and data.
+    '''
+
+    tspot, ffact, beta = par
+    mod = compute_deltaf_f(tspot, ffact, beta, wlobs, zz, pardict)
+    res = np.zeros(len(mod))
+    flag = spec >= mod
+    res[flag] = (spec - mod)[flag]**2/yerrup[flag]**2
+    res[~flag] = (spec - mod)[~flag]**2/yerrdown[~flag]**2
+
+    return res
+
+def lnprior(par):
+
+    tspot, ffact, beta = par
+    if np.logical_or.reduce((tspot < 3600., tspot > 5000., ffact <= 1e-6, \
+                ffact >= 0.6, beta <= 0, beta > 1)):
+                return -np.inf
+    else:
+        lnp_ffact = lnp_jeffreys(ffact, 0.6, 1e-6)
+        return lnp_ffact
+
+def lnp_jeffreys(val, valmax, valmin):
+    '''
+    Jeffreys prior
+    '''
+    return np.log(1./(val*np.log(valmax/valmin)))
+
+def lnprob(par, spec, yerrup, yerrdown, wlobs, zz, pardict):
+    '''
+    Compute posterior probability for spectrum fit.
+    '''
+
+    lp = lnprior(par)
+    if not np.isfinite(lp):
+        return -np.inf
+    else:
+        chi2 = np.sum(spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict))
+        return chi2 + lp
+
+def mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict):
+    '''
+    Get posterior distribution for the starspot configuration.
+    '''
+
+    # MCMC starting about the optimized solution
+    initial = np.array(soln.x)
+    ndim, nwalkers = len(initial), 32
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
+            args=([A, yerrup, yerrdown, wl, zz, pardict]), threads=8)
+
+    # Variation around LM solution
+    p0 = initial + 0.01*(np.random.randn(nwalkers, ndim))*initial
+                #+ 1e-6*(np.random.randn(nwalkers, ndim))
+
+    # Check condition number (must be < 1e8 to maximise walker linear
+    # independence). Problems might be caued by LM results = 0
+    cond = np.linalg.cond(p0)
+    while cond >= 1e8:
+        p0 += 1e-4*(np.random.randn(nwalkers, ndim))
+        cond = np.linalg.cond(p0)
+
+    print("Running burn-in...")
+    nsteps = 128
+    width = 30
+    for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
+        n = int((width+1)*float(i)/nsteps)
+        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
+    sys.stdout.write("\n")
+    p0, lp, _ = result
+    sampler.reset()
+
+    print("Running production...")
+    nsteps = 128
+    width = 30
+    for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
+        n = int((width+1) * float(i) / nsteps)
+        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
+    sys.stdout.write("\n")
+    pfin, lpfin, _ = result
+
+    # Merge in single chains
+    samples = sampler.flatchain
+    lnL = sampler.flatlnprobability
+
+    best_sol = samples[lnL.argmax()]
+    try:
+        acor_time = integrated_time(samples, c=10)
+        acor_multiples = np.shape(samples)[0]/acor_time
+        print('Length chains:', np.shape(samples)[0])
+        print('Autocorrelation multiples:', acor_multiples)
+        print('Integrated autocorrelation time')
+        for jpar in np.arange(np.shape(samples)[1]):
+            IAT = emcee.autocorr.integrated_time(samples[:, j])
+            print('IAT multiples for parameter', jpar, ':', \
+                                np.shape(samples)[0]/IAT)
+    except:
+        print('The chain is too short')
+        pass
+
+    print("Mean acceptance fraction: {0:.3f}"
+                .format(np.mean(sampler.acceptance_fraction)))
+
+    percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
+                        for i in np.arange(np.shape(samples)[1])]
+
+    titles = [r'$T_\bullet$', '$\delta$', r'$\beta$']
+    truths = [4000, 0.01, 0.01]
+    cornerplot.cornerplot(samples, titles, truths, \
+            pardict['chains_folder'] + '/cornerspec.pdf', ranges=None)
+    set_trace()
+    # Save chains
+    #fout = open(diz['chains_folder'] + '/chains_' + str(ind) \
+    #                                                + '.pickle', 'wb')
+    #chains_save = {}
+    #chains_save['wl'] = wl
+    #chains_save['LM'] = soln.x
+    #chains_save['Burn_in'] = [p0, lp]
+    #chains_save['Chains'] = samples
+    ##chains_save['Starspot_size'] = size
+    #chains_save['Mean_acceptance_fraction'] \
+    #                                = np.mean(sampler.acceptance_fraction)
+    #chains_save['Autocorrelation_multiples'] = acor_time
+    #chains_save["Percentiles"] = [percentiles]
+    #chains_save["ln_L"] = lnL
+    #pickle.dump(chains_save, fout)
+    #fout.close()
+
+    #fout = open(diz['chains_folder'] + '/chains_best_' \
+    #            + str(ind) + '.p', 'wb')
+    #pickle.dump(best_sol, fout)
+    #fout.close()
+
+    return
