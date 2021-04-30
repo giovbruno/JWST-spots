@@ -843,7 +843,7 @@ def main():
     for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):
         #for i, asize in enumerate([3.]):
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([40.]): # mu angle 40.
+            for k, theta in enumerate([0.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
@@ -854,7 +854,7 @@ def main():
                 #    fit_spectra=True, spotted_starmodel=False, \
                 #    inputpars=inputpars, update=False, chi2rplot=True)
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=False, fit_transits=False, \
+                    simulate_transits=False, fit_transits=True, \
                     fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True)
 
