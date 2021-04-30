@@ -32,7 +32,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + '_noscatter/'
+            + '_mag' + str(magstar) + '/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -134,7 +134,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     # Stellar/planet pars
     ip = {}
-    ip['rplanet'] = rplanet #f1.0 for 5000 K star, 0.3 for M star
+    ip['rplanet'] = rplanet #1.0 for 5000 K star, 0.3 for M star
     ip['rstar'] = rstar
     ip['tstar'] = tstar
     ip['loggstar'] = loggstar
@@ -147,8 +147,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         mags = [4.5, 6.0, 7.5, 9.0]
         #mags = [6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
-        #mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([11.5])
+        mags = np.linspace(10.5, 14.5, 5)
+        #mags = np.array([13.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -174,7 +174,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 + '_theta' + str(int(ip['theta'])) + '.pdf'
         if os.path.isfile(checkf):
             return
-
+    '''
     dict_starmodel, dict_spotmodels \
                         = ingest_stellarspectra(tstar, tcontrast, loggstar)
 
@@ -185,16 +185,16 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     if models == 'josh':
         muval = np.cos(np.radians(ip['theta']))
         ip['muindex'] = abs(ip['starmodel']['mus'] - muval).argmin()
-
+    '''
     ## Try only one Tspot
     if tstar == 3500:
     # Very cool models will only be used for the fit
         tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-900.])
+        #tcontrast = np.array([-600.])
     elif tstar == 5000.:
-        #tcontrast = np.arange(-1200, 0, 100)
-        tcontrast = np.array([-1200.])
-
+        tcontrast = np.arange(-1200, 0, 100)
+        #tcontrast = np.array([-600.])
+    '''
     if len(opers) > 0:
         for mag in mags:
             for td in tcontrast[::3]:
@@ -202,7 +202,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 pardict = go(mag, ip, opers, models, res=res, \
                             fittype=fittype, \
                             spotted_starmodel=spotted_starmodel)
-
+    '''
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     plot_res3(ip, mags, tcontrast, models)
@@ -439,12 +439,10 @@ def plot_unc_results(instrument, ip):
 
     return
 
-def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=5):
+def ingest_stellarspectra(tstar, tcontrast, loggstar):
     '''
     Ingest all stellar spectra needed for a given simulation (so you only have
     to do it once).
-
-    everymu: use only every xxx mu values
     '''
 
     print('Ingesting stellar models...')
@@ -458,7 +456,7 @@ def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=5):
     filename = josh_grid_folder \
        + 'starspots.teff=' + tstar_ + '.logg=' + loggstar_ + '.z=0.0.irfout.csv'
     g = np.genfromtxt(filename, delimiter=',')
-    mus = g[0][1:][::everymu]
+    mus = g[0][1:]
     dict_starmodel['mus'] = mus
     dict_starmodel['wl'] = [g[i][0] for i in range(2, len(g))]
     dict_starmodel['spec'] = []
@@ -481,7 +479,7 @@ def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=5):
 
         dict_spotmodels[tc] = {}
         g = np.genfromtxt(filename, delimiter=',')
-        mus = g[0][1:][::everymu]
+        mus = g[0][1:]
         dict_spotmodels[tc]['mus'] = np.array(mus)
         dict_spotmodels[tc]['wl'] = np.array([g[i][0] for i in range(2,len(g))])
         dict_spotmodels[tc]['spec'] = []
@@ -755,7 +753,6 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
     Represent the results of the LM fits.
     '''
 
-    plt.close('all')
     tcontrast = tcontrast[::3]
     tdiff_output = np.zeros((len(mags), len(tcontrast)))
     ffact_map = np.zeros((len(mags), len(tcontrast)))
@@ -790,7 +787,7 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
             resfile.close()
             tdiff_output[i, j] = resdict[0].x[0] - tumbra
             ffact_map[i, j] = resdict[0].x[1]
-            #betaplanet[i, j] = resdict[0].x[2]
+            betaplanet[i, j] = resdict[0].x[2]
             sizes.append(resdict[1])
         plt.plot(tcontrast, sizes, 'o-', label=str(mag))
     plt.xlabel(r'$T_\bullet - T_\star$', fontsize=16)
@@ -801,10 +798,10 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
             + '_spotsize_a' + str(int(ip['aumbra'])) \
             + '_theta' + str(int(ip['theta'])) + '.pdf')
 
-    plt.close('all')
+    return
 
-    labels = [r'Output $\Delta T_\bullet \, [K]$', '$\delta$']#, r'$\beta$']
-    outname = ['Tspot', 'delta']#, 'beta']
+    labels = [r'Output $\Delta T_\bullet \, [K]$', '$\delta$', r'$\beta$']
+    outname = ['Tspot', 'delta', 'beta']
     for k, tab in enumerate([tdiff_output, ffact_map]):#, betaplanet]):
         fig = plt.figure()
         ax = fig.add_axes([0.13, 0.13, 0.77, 0.77])
@@ -843,16 +840,16 @@ def main():
     for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):
         #for i, asize in enumerate([3.]):
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([40.]): # mu angle 40.
+            for k, theta in enumerate([0., 40.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
                 #if ~np.logical_and.reduce((i == 0, j == 0, k == 0, m == 0)):
-                #cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                #    simulate_transits=False, fit_transits=False, \
-                #    fit_spectra=True, spotted_starmodel=False, \
-                #    inputpars=inputpars, update=False, chi2rplot=True)
+                cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                    simulate_transits=False, fit_transits=False, \
+                    fit_spectra=True, spotted_starmodel=False, \
+                    inputpars=inputpars, update=False, chi2rplot=True)
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
                     simulate_transits=False, fit_transits=False, \
                     fit_spectra=True, spotted_starmodel=False, \

@@ -7,6 +7,7 @@ sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
 import emcee
 from autocorr import integrated_time
 import batman
+from pytransit import QuadraticModel
 import cornerplot
 import get_uncertainties
 from pdb import set_trace
@@ -87,11 +88,11 @@ def transit_emcee(diz, ind, bestbin):
     # Initial values
     kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, 1e-3, 0., 1.
     if diz['theta'] == 0.:
-        tspot_ = 0.095 #0.1
+        tspot_ = 0.1#0.095 #0.1
     else:
         if diz['tstar'] == 3500:
             if diz['instrument'] == 'NIRCam':
-                tspot_ = 0.115
+                tspot_ = 0.10#0.115
             else:
                 tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
         else:
@@ -318,6 +319,8 @@ def plot_best(sol, t, y, yerr, wl, plotname):
 
     plt.title('Joint transit-starspot fit', fontsize=18)
     plt.savefig(plotname)
+    #plt.show()
+    #set_trace()
     plt.close('all')
 
     return
@@ -367,14 +370,17 @@ def gauss(x, par):
     A, x0, sigma, n = par
     y = A*np.exp(-(abs(x - x0)/sigma)**n)
 
+    # Bring the function to zero beyond 3 sigma
+    #y[abs(x - x0) > 1.7*sigma] = 0.
+
     return y
 
-def transit_model(par, t, wl, u1=0, u2=0):
+def transit_model(par, t, wl, u1=0, u2=0, pp=0., semimaj=0.):
     '''
     # From stellar density to aR*
     #aR = (6.67408e-11*1e-3*par[2]*(per_planet*86400)**2/(3*np.pi))**(1./3.)
 
-    # q1 and q1 (as free parameters) are Kipping's parameters
+    # q1 and q2 (as free parameters) are Kipping's parameters
     '''
 
     if wl <= 12.7:
@@ -384,9 +390,15 @@ def transit_model(par, t, wl, u1=0, u2=0):
 
     params = batman.TransitParams()
     params.t0 = par[1]
-    params.per = per_planet
+    if pp == 0.:
+        params.per = per_planet
+    else:
+        params.per = pp
     params.rp = par[0]
-    params.a = aR
+    if semimaj == 0.:
+        params.a = aR
+    else:
+        params.a = semimaj
     params.inc = par[2] # in degrees
     params.ecc = 0.
     params.w = 0.
@@ -396,6 +408,24 @@ def transit_model(par, t, wl, u1=0, u2=0):
     m = batman.TransitModel(params, t)
     flux = m.light_curve(params)
 
+    '''
+    tm = QuadraticModel()
+    tm.set_data(t)
+
+    k = par[0]
+    ldc = np.array([u1, u2])
+    t0 = par[1]
+    if pp == 0.:
+        p = per_planet
+    else:
+        p = pp
+    if semimaj == 0.:
+        a = aR
+    else:
+        a = semimaj
+    i = np.radians(par[2])
+    flux = tm.evaluate(k, ldc, t0, p, a, i)
+    '''
     return flux
 
 def lnprob(params, t, y, yerr):

@@ -9,6 +9,8 @@ import pandexo.engine.justdoit as jdi # THIS IS THE HOLY GRAIL OF PANDEXO
 import pandexo.engine.justplotit as jpi
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
+from transit_fit import transit_model, gauss
+from scipy.optimize import minimize
 import numpy as np
 import pysynphot
 import pathlib
@@ -194,6 +196,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #xobs -= 0.5
         flag = xobs < 6.5
         xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
+        yobs = np.zeros(len(xobs)) + 0.01
         #yobs_err /= 2.
         # Rebin from resolution 100 to res
         #xobs = rebin.rebin_wave(xobs_, 70)
@@ -282,6 +285,8 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
 
     # Here, the last element of arange is the white light curve
     rise = []
+    # Save contrast spectrum
+    fout_ = open(pardict['data_folder'] + 'contrast_spectrum.pic', 'wb')
     for i in np.arange(len(xobs)):
         # Compute transit with two spots
         fix_dict = {}
@@ -336,7 +341,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         if models == 'phoenix':
             wlumbra = pysynphot.Icat(models, pardict['tumbra'], 0.0, \
                                 pardict['loggstar'] - 0.5).wave
-            umbram =  pysynphot.Icat(models, pardict['tumbra'], 0.0, \
+            umbram = pysynphot.Icat(models, pardict['tumbra'], 0.0, \
                                 pardict['loggstar'] - 0.5).flux
             #penumbram = pysynphot.Icat(models, pardict['tpenumbra'], 0.0, \
             #                    pardict['loggstar'] - 0.5).flux
@@ -408,35 +413,98 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #tt = np.arange(0., 0.4, 60.*1./86400.) # F star
         # Define in-transit/out-of-transit duration
         if pardict['tstar'] == 3500:
-            tt_ = np.arange(0.075 - 0.04, 0.125 + 0.04, 90./86400.)
-            tt = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
+            #tt_ = np.arange(0.075 - 0.04, 0.125 + 0.04, 90./86400.)
+            tt_ = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
         elif pardict['tstar'] == 5000:
-            tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 90./86400.)
-            tt = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
+            #tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 90./86400.)
+            tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
         transit_ = ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
-        fitint = interp1d(tt_, transit_, bounds_error=False, \
-                        fill_value='extrapolate')
-        transit = fitint(tt)
+        # Subtract planet-only contribution and add pytransit model
+        #fix_dict['nspots'] = 0
+        # From stellar density
+        rhostar = 5.14e-5/pardict['rstar']*10**pardict['loggstar'] #cgs
+        aR = (6.67408e-11*rhostar*1e3*(pardict['pplanet']*86400.)**2 \
+                            /(3.*np.pi))**(1./3.)
+        #transit = transit_ - ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
+
+        # Compare KSint and batman model
+        #transit2 = ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
+        #newpar = [params[0], 0.1, fix_dict['incl'], \
+        #    (params[2] + params[3])**2, 0.5*params[2]/(params[2] + params[3])]
+        #transit3 = (transit_model(newpar, tt_, 10.) + gauss(tt_, [0.001, 0.1, \
+        #            0.01, 2.]))*np.polyval([0.01, 0.01, 0.9], tt_)
+        #plt.plot(tt_, transit2)
+        #plt.plot(tt_, transit3)
+        #plt.show()
+        #set_trace()
+        #fitint = interp1d(tt_, transit_, bounds_error=False, \
+        #                fill_value='extrapolate')
+        #transit = fitint(tt)
         # White noise
-        uncph = yobs_err[i]*len(tt)**0.5/2.
-        transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
-        yerr = np.zeros(len(transit)) + uncph
+        uncph = yobs_err[i]*len(tt_)**0.5/2.
+        #transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
+        yerr = np.zeros(len(transit_)) + uncph
+
+        # Fit this thing with a Gaussian + quadratic function
+        #bounds_model = []
+        #bounds_model.append((0., 1.))
+        #bounds_model.append((0.9, 0.11))
+        #bounds_model.append((0., 1.))
+        #bounds_model.append((0., 10.))
+        #bounds_model.append((-1e6, 1e6))
+        #bounds_model.append((-1e6, 1e6))
+        #bounds_model.append((0., 1e-6))
+
+        #p0 = [0.01, 0.1, 0.01, 2., 0., 0., 0.01]
+        #nll = lambda *args: -lnlike(*args)
+        #soln = minimize(nll, p0, jac=False, method='L-BFGS-B', \
+        #     args=(tt_, transit, yerr), bounds=bounds_model)
+
+        #transit_ += transit_model([params[0], 0.1, pardict['incl'], \
+        #            params[2], params[3]], tt_, 1.0, pp=pardict['pplanet'], \
+        #            semimaj=aR)
+
         plt.close('all')
-        plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
+        plt.errorbar(tt_, transit_, yerr=yerr, fmt='k.')#, capsize=2)
+        #plt.plot(tt_, modspot(soln.x, tt_))
         plt.xlabel('Time [d]', fontsize=16)
         plt.ylabel('Relative flux', fontsize=16)
         plt.title('Channel: ' + str(round(xobs[i], 3)) + ' $\mu$m', fontsize=16)
         if i == len(xobs) - 1:
             i = -1
-
+        #plt.show()
+        #set_trace()
         plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
                         + '_' + pardict['observatory'] + '.pdf')
         savefile = open(pardict['data_folder'] + 'transit_spots' \
                         + '_' + str(i) + '.pic', 'wb')
-        pickle.dump([tt, transit, yerr, xobs[i]], savefile)
+        pickle.dump([tt_, transit_, yerr, xobs[i]], savefile)
+        #pickle.dump([tt_, transit3, yerr, xobs[i]], savefile)
         savefile.close()
 
+    pickle.dump([xobs, rise], fout_)
+    fout_.close()
+    # Save fix_dict
+    fout2 = open(pardict['data_folder'] + 'KSint_pars.pic', 'wb')
+    pickle.dump(fix_dict, fout2)
+    fout2.close()
+
     return len(xobs)
+
+def modspot(par, t):
+
+    Aspot, x0, sig, n, r0, r1, r2 = par
+    return gauss(t, [Aspot, x0, sig, n]) * np.polyval([r0, r1, r2], t)
+
+def lnlike(par, t, y, yerr):
+
+    sigma = np.mean(yerr)
+    lnL = -0.5*len(y)*np.log(sigma) - 0.5*len(y)*np.log(2.*np.pi) \
+                - 0.5*chi2(modspot(par, t), y, yerr)
+    return lnL
+
+def chi2(mod, y, yerr):
+    return np.sum((y - mod)**2/(yerr**2))
 
 def integ_filter(wth, fth, wmodel, fmodel, integrate='model'):
 

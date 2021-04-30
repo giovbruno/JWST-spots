@@ -108,22 +108,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     fout1 = open(pardict['chains_folder'] + 'contrast_spec_fit.pic', 'wb')
     pickle.dump([wl, A, yerrup, yerrdown], fout1)
     fout1.close()
-    fout2 = open(pardict['chains_folder'] + 'kr_fit.pic', 'wb')
-    pickle.dump([wl, kr, unckr], fout2)
-    fout2.close()
-
-    # Import kr from somewhere else
-    krfile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRSpec_Prism/star_5000K/p1.0_star1.0_5000_4.5_spot3800_i90_a5_theta0_mag14.5_noscatter/MCMC/kr_fit.pic', 'rb')
-    krf = pickle.load(krfile)
-    #kr = krf[1]
-    #unckr = krf[2]
-    krfile.close()
-    Afile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRSpec_Prism/star_5000K/p1.0_star1.0_5000_4.5_spot3800_i90_a5_theta0_mag14.5_noscatter/MCMC/contrast_spec_fit.pic', 'rb')
-    Af = pickle.load(Afile)
-    #A = Af[1]
-    #yerrup = Af[2]
-    #yerrdown = A[3]
-    Afile.close()
+    return
     #return
     #Aref = A[-1]
     #yerrupmed = yerrup[-1]
@@ -318,12 +303,12 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
             if pardict['tstar'] == 5000.:
                 #boundsm = ([3600, minspotsize], \
                 #            [5000., 1.])
-                boundsm = ([3600., 0.], [5000., 1000.])
+                boundsm = ([3600., 0.], [5000., 2.])
                 #p0 = [4000., minspotsize*1.1]
                 p0 = [4000., 0.01]
             elif pardict['tstar'] == 3500:
                 boundsm = ([2300, 0.], \
-                            [3500., 1000.])
+                            [3500., 2.])
                 p0 = [3000., 1.1]
             # This is once for the fit
             ispecstar = np.transpose(pardict['starmodel']['spec'])
@@ -924,7 +909,6 @@ def compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
     Compute normalized flux variation during starspot occultation.
     '''
 
-    #ffact = 7.99880071e-01
     # Both intensity and flux are needed
     muspot = pardict['starmodel']['mus'][pardict['muindex']]
     i_star = pardict['starmodel']['spec'][pardict['muindex']]
@@ -935,7 +919,7 @@ def compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
 
     # Flux from spot
     i_spot = np.hstack(zz(wave, tspot))
-    #f_spot = np.pi*ffact*i_spot
+    f_spot = np.pi*ffact*i_spot
     #f_star_spot = fstar - np.pi*i_star*ffact + f_spot
 
     if pardict['instrument'] == 'NIRSpec_Prism':
@@ -966,10 +950,7 @@ def compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
     #idiff = degrade_spec(idiff, wth, wlobs)
     #beta = np.pi*(delta*semimaj)**2/(pardict['rstar']*Rsun)**2*kr**2
     #ballerini = 1. - 0.5*(1. - f_star_spot/fstar)*ffact
-    #ffact = 1. - (np.cos(kr))**2
-    ffact = 1. - (np.cos(np.array(kr)/(semimaj/pardict['rstar']/Rsun)))**2
-
-    beta = ffact*np.pi#*np.array(kr)**2#*f_star_spot/fstar#)
+    beta = ffact*np.pi*np.array(kr)#**2#*f_star_spot/fstar#)
     #beta = ffact*np.pi*kr[-1]**2#
     #beta = degrade_spec(beta, wth, wlobs)
 
@@ -981,7 +962,7 @@ def compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
         set_trace()
     #deltaf_f = deltaf_f*len(pardict['starmodel']['mus'])*beta*kr**2
     #planetangle = kr*pardict['rstar']*Rsun/semimaj
-    return deltaf_f*beta[:len(deltaf_f)]#[:-1]#/polyhere[:-1]
+    return deltaf_f*beta[:-1]#/polyhere[:-1]
 
 def compute_deltaf_f2(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
     '''
