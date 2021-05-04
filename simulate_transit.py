@@ -14,7 +14,7 @@ from scipy.optimize import minimize
 import numpy as np
 import pysynphot
 import pathlib
-import rebin
+import rebin_spectra
 import pickle
 import os
 from astropy.io import fits

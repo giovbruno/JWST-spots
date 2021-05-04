@@ -31,7 +31,7 @@ thrfile4 = foldthrough + 'JWST_NIRSpec.CLEAR.dat'
 plt.ioff()
 
 def read_res(pardict, plotname, resfile, models, fittype='grid', \
-            resol=10, interpolate=True, LM=True):
+            resol=10, interpolate=True, LM=True, model='KSint'):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
@@ -72,7 +72,7 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     for i in np.concatenate((np.arange(expchan - 1), [-1])):
         #if i < expchan - 1:
         ffopen = open(pardict['chains_folder'] + 'chains_' \
-                + str(i) + '.pickle', 'rb')
+                + str(model) + '_' + str(i) + '.pickle', 'rb')
         res = pickle.load(ffopen)
         wl.append(res['wl'])
         if i == bestbin:
@@ -113,17 +113,17 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     fout2.close()
 
     # Import kr from somewhere else
-    krfile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRSpec_Prism/star_5000K/p1.0_star1.0_5000_4.5_spot3800_i90_a5_theta0_mag14.5_noscatter/MCMC/kr_fit.pic', 'rb')
-    krf = pickle.load(krfile)
+    #krfile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRSpec_Prism/star_5000K/p1.0_star1.0_5000_4.5_spot3800_i90_a5_theta0_mag14.5_noscatter/MCMC/kr_fit.pic', 'rb')
+    #krf = pickle.load(krfile)
     #kr = krf[1]
     #unckr = krf[2]
-    krfile.close()
-    Afile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRSpec_Prism/star_5000K/p1.0_star1.0_5000_4.5_spot3800_i90_a5_theta0_mag14.5_noscatter/MCMC/contrast_spec_fit.pic', 'rb')
-    Af = pickle.load(Afile)
+    #krfile.close()
+    #Afile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRSpec_Prism/star_5000K/p1.0_star1.0_5000_4.5_spot3800_i90_a5_theta0_mag14.5_noscatter/MCMC/contrast_spec_fit.pic', 'rb')
+    #   Af = pickle.load(Afile)
     #A = Af[1]
     #yerrup = Af[2]
     #yerrdown = A[3]
-    Afile.close()
+    #Afile.close()
     #return
     #Aref = A[-1]
     #yerrupmed = yerrup[-1]
@@ -286,18 +286,6 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
                 #                specA, A, yerrup, yerrdown)))
                 dict_results[pm][stmod][temp - pardict['tstar']] = likelihood[i]
         else:
-            # In
-            #mat = []
-            # interpolate models, make finer grid
-            #for ti in tspot_:
-            #    tt = format(ti, '2.2e')
-            #    wl_ = pardict['spotmodels'][tt]['wl']
-            #    mat.append(pardict['spotmodels'][tt]['spec'][pardict['muindex']])
-            ## interpolate with that and wl grid, and produce new spectrum
-            #zz = RectBivariateSpline(wl_, tspot_, np.array(mat).T)
-            #deltamu \
-            #    = #abs(np.arccos(pardict['starmodel']['mus'][pardict['muindex']]) \
-            #- np.arccos(pardict['starmodel']['mus'][pardict['muindex'] - 1]))
             # Get starspot mu ** inner circle **
             theta = np.arccos(pardict['starmodel']['mus'][pardict['muindex']])
             if theta != 0:
@@ -967,9 +955,9 @@ def compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
     #beta = np.pi*(delta*semimaj)**2/(pardict['rstar']*Rsun)**2*kr**2
     #ballerini = 1. - 0.5*(1. - f_star_spot/fstar)*ffact
     #ffact = 1. - (np.cos(kr))**2
-    ffact = 1. - (np.cos(np.array(kr)/(semimaj/pardict['rstar']/Rsun)))**2
+    #ffact = 1. - (np.cos(np.array(kr)/(semimaj/pardict['rstar']/Rsun)))**2
 
-    beta = ffact*np.pi#*np.array(kr)**2#*f_star_spot/fstar#)
+    beta = ffact*np.pi*np.array(kr)**2#*f_star_spot/fstar#)
     #beta = ffact*np.pi*kr[-1]**2#
     #beta = degrade_spec(beta, wth, wlobs)
 
@@ -1097,7 +1085,7 @@ def lnprior(par, pardict):
     tspot, ffact = par
     if pardict['tstar'] == 3500:
         if np.logical_or.reduce((tspot < 2300., tspot > 3500., \
-                ffact <= 1e-8, ffact > 1.0)):
+                ffact <= 1e-8, ffact > 10.0)):
                 return -np.inf
         else:
             #lnp_ffact = lnp_jeffreys(ffact, 1.0, 1e-6)
@@ -1105,7 +1093,7 @@ def lnprior(par, pardict):
 
     elif pardict['tstar'] == 5000:
         if np.logical_or.reduce((tspot < 3600., tspot > 5000., \
-                ffact <= 1e-8, ffact > 1.0)):
+                ffact <= 1e-8, ffact > 10.0)):
                 return -np.inf
         else:
             return 0.

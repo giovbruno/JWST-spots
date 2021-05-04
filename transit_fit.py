@@ -15,7 +15,7 @@ import get_uncertainties
 from pdb import set_trace
 plt.ioff()
 
-def transit_spectro(pardict, resol=10):
+def transit_spectro(pardict, resol=10, model='KSint'):
     '''
     Launches on all spectral bands
     '''
@@ -39,11 +39,11 @@ def transit_spectro(pardict, resol=10):
     ymoderr = spec[2]
     #bestbin = ymoderr.argmin()
     bestbin = -1
-    transit_emcee(pardict, bestbin, bestbin)
+    transit_emcee(pardict, bestbin, bestbin, model=model)
 
     for i in np.arange(expchan - 1):
         if i != bestbin:
-            transit_emcee(pardict, int(i), bestbin)
+            transit_emcee(pardict, int(i), bestbin, model=model)
 
     return
 
@@ -113,8 +113,8 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         else:
             modeltype = 'fixt0'
             # Extract spot time from first wavelength bin
-            ffopen = open(diz['chains_folder'] + 'chains_' + str(bestbin) \
-                        + '.pickle', 'rb')
+            ffopen = open(diz['chains_folder'] + 'chains_' + str(model) \
+                + '_' + str(bestbin) + '.pickle', 'rb')
             res = pickle.load(ffopen)
             perc = res['Percentiles'][0]
             # These will be fixed in the fit
@@ -137,7 +137,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             #    for kk in [0, 3, 4, 5, 6]:
             #        temp.append(bounds_model[kk])
             #    bounds_model = temp
-
+        fix_dict = {}
         # LM fit
         options= {}
         ftol = 1e-10

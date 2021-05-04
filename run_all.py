@@ -13,7 +13,7 @@ import scipy
 from pdb import set_trace
 
 def go(magstar, pardict, operation, models, res=10, fittype='grid', \
-        spotted_starmodel=True):
+        spotted_starmodel=True, model='KSint'):
 
     # Folders & files (add to the input dictionary)
     #pardict = {}
@@ -99,12 +99,12 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
 
     # Select channels and fit transit + spots
     if 'fit_transits' in operation:
-        transit_fit.transit_spectro(pardict, resol=res)
+        transit_fit.transit_spectro(pardict, resol=res, model=model)
     # Fit derived transit depth rise with stellar models
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, fittype=fittype)
+          models, resol=res, fittype=fittype, model=model)
 
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
@@ -120,7 +120,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=False, fit_transits=True, fit_spectra=True, \
             models='josh', res=10, fittype='grid', \
             spotted_starmodel=False, inputpars={}, update=False, \
-            chi2rplot=False):
+            chi2rplot=False, model='KSint'):
     '''
     Run simulations for several scenarios.
 
@@ -148,11 +148,11 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #mags = [6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
         #mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([11.5])
+        mags = np.array([10.5])#, 12.5, 13.5, 14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
-        ip['aumbra'] = 5.
+        ip['aumbra'] = 10.#5.
         #tcontrast = np.array([-1200.])
     elif tstar == 3500:
         tcontrast = np.arange(-1200, 0, 100)
@@ -201,7 +201,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 ip['tumbra'] = tstar + td
                 pardict = go(mag, ip, opers, models, res=res, \
                             fittype=fittype, \
-                            spotted_starmodel=spotted_starmodel)
+                            spotted_starmodel=spotted_starmodel, model=model)
 
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
@@ -840,7 +840,7 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
 
 def main():
 
-    for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):
+    for m, instrum in enumerate(['NIRSpec_Prism']):#, 'NIRCam']):
         #for i, asize in enumerate([3.]):
         for j, incl in enumerate([90.]):
             for k, theta in enumerate([0.]): # mu angle 40.
@@ -854,9 +854,10 @@ def main():
                 #    fit_spectra=True, spotted_starmodel=False, \
                 #    inputpars=inputpars, update=False, chi2rplot=True)
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=False, fit_transits=True, \
+                    simulate_transits=False, fit_transits=False, \
                     fit_spectra=True, spotted_starmodel=False, \
-                    inputpars=inputpars, update=False, chi2rplot=True)
+                    inputpars=inputpars, update=False, chi2rplot=True, \
+                    model='batman')
 
     return
 
