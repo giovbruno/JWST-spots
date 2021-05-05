@@ -18,6 +18,7 @@ sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
 import emcee
 import cornerplot
 from transit_fit import transit_model
+import lmfit
 
 homef = os.path.expanduser('~')
 modelsfolder = homef + '/Shelf/stellar_models/phxinten/HiRes/'
@@ -31,7 +32,8 @@ thrfile4 = foldthrough + 'JWST_NIRSpec.CLEAR.dat'
 plt.ioff()
 
 def read_res(pardict, plotname, resfile, models, fittype='grid', \
-            resol=10, interpolate=True, LM=True, model='KSint'):
+            resol=10, interpolate=True, LM=True, model='KSint', \
+            plot_input_spectrum=False):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
@@ -71,8 +73,12 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     polyhere = []
     for i in np.concatenate((np.arange(expchan - 1), [-1])):
         #if i < expchan - 1:
-        ffopen = open(pardict['chains_folder'] + 'chains_' \
-                + str(model) + '_' + str(i) + '.pickle', 'rb')
+        try:
+            ffopen = open(pardict['chains_folder'] + 'chains_' \
+                    + str(model) + '_' + str(i) + '.pickle', 'rb')
+        except FileNotFoundError: # old version
+            ffopen = open(pardict['chains_folder'] + 'chains_' \
+                    + str(i) + '.pickle', 'rb')
         res = pickle.load(ffopen)
         wl.append(res['wl'])
         if i == bestbin:
@@ -133,7 +139,6 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
     # Get **observed** mid-transit time
     #print('kr =', kr)
 
-    print('\n')
     mufit = pardict['muindex']
     wl = np.array(wl)
     if pardict['instrument'] == 'NIRCam':
@@ -306,35 +311,46 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
             if pardict['tstar'] == 5000.:
                 #boundsm = ([3600, minspotsize], \
                 #            [5000., 1.])
-                boundsm = ([3600., 0.], [5000., 1000.])
+                boundsm = ([3600., 0.0], [5000., 1.5])
                 #p0 = [4000., minspotsize*1.1]
-                p0 = [4000., 0.01]
+                p0 = [4000., 1.0]
             elif pardict['tstar'] == 3500:
-                boundsm = ([2300, 0.], \
-                            [3500., 1000.])
+                boundsm = ([2300, 0.0], \
+                            [3500., 1.5])
                 p0 = [3000., 1.1]
             # This is once for the fit
             ispecstar = np.transpose(pardict['starmodel']['spec'])
             mmu = pardict['starmodel']['mus']
             f_star = 2.*np.pi*np.trapz(ispecstar*mmu, x=mmu)
-            soln = least_squares(spec_res, p0, bounds=boundsm, \
-                    args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
-                    verbose=0)
-            bsol = compute_deltaf_f(soln.x[0], soln.x[1], \
+            #soln = least_squares(spec_res, p0, bounds=boundsm, \
+            #        args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
+            #        verbose=0)
+            params = lmfit.Parameters()
+            params.add('Tspot', value=p0[0], min=boundsm[0][0], \
+                                                            max=boundsm[1][0])
+            params.add('beta', value=p0[1], min=boundsm[0][1], \
+                                                            max=boundsm[1][1])
+
+            soln = lmfit.minimize(spec_res, params, method='leastsq', \
+                    args=(A, yerrup, yerrdown, wl, zz, pardict, f_star))
+            lmfit.printfuncs.report_fit(soln)
+
+            bsol = compute_deltaf_f(soln.params['Tspot'], soln.params['beta'], \
                         wl, zz, pardict, fstar=f_star)
-            bsol2 = compute_deltaf_f(pardict['tumbra'], soln.x[1], \
+            bsol2 = compute_deltaf_f(pardict['tumbra'], soln.params['beta'], \
                         wl, zz, pardict, fstar=f_star)
             plt.plot(wl, bsol, label='Best sol')
             plt.plot(wl, bsol2, label='True value')
-            # Plot input contrast spectrum
-            cspectrumf = open(pardict['data_folder'] \
-                            + 'contrast_spectrum.pic', 'rb')
-            cspectrum = pickle.load(cspectrumf)
-            plt.plot(cspectrum[0][:-1], \
-                    cspectrum[1][:-1]/max(cspectrum[1][:-1])*A.max(), \
-                    label='Scaled input')
-            plt.legend()
-            cspectrumf.close()
+            if plot_input_spectrum:
+                # Plot input contrast spectrum
+                cspectrumf = open(pardict['data_folder'] \
+                                + 'contrast_spectrum.pic', 'rb')
+                cspectrum = pickle.load(cspectrumf)
+                plt.plot(cspectrum[0][:-1], \
+                        cspectrum[1][:-1]/max(cspectrum[1][:-1])*A.max(), \
+                        label='Scaled input')
+                plt.legend()
+                cspectrumf.close()
             # Let's run an MCMC
             #res = mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, f_star)
 
@@ -346,13 +362,14 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
             print('L max =', likelihood[maxL], 'with Tspot =', \
                                     tspot_[maxL], 'K')
         else:
-            print('Best sol:', soln.x)
+            print('Best sol:', soln.params['Tspot'])
         #plt.title('True value: ' + str(int(pardict['tumbra'])) + ' K' \
         #   + r', best fit: $T_\bullet=$' + str(int(tspot_[maxL])) + ' K', \
         #    fontsize=16)
+        plt.legend(frameon=False)
         plt.title('True value: ' + str(int(pardict['tumbra'])) + ' K' \
-           + r', best fit: $T_\bullet=$' + str(int(soln.x[0])) + ' K', \
-            fontsize=16)
+           + r', best fit: $T_\bullet=$' + str(int(soln.params['Tspot'])) \
+            + ' K', fontsize=16)
         plt.xlim(wl.min() - 0.2, wl.max() + 0.2)
         if LM:
             plt.savefig(plotname + stmod + '_' + pardict['observatory'] \
@@ -361,7 +378,6 @@ def read_res(pardict, plotname, resfile, models, fittype='grid', \
                     + pardict['observatory'] + '.pickle', 'wb')
             pickle.dump([soln, np.round(np.degrees(delta), 2)], fout)
             fout.close()
-            set_trace()
             return
 
     x, y = [], []
@@ -948,7 +964,7 @@ def compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
     #f_star_spot = f_star_spot[wlfl]
     #modint = interp1d(wl, f_star_spot)
     #deltaf_f = modint(w)
-    deltaf_f = degrade_spec(idiff/fstar, wth, wlobs)
+    deltaf_f = degrade_spec(idiff/fstar, wth, wlobs)/polyhere[:-1]
     #f_star_spot = degrade_spec(f_star_spot, wth, wlobs)
     #fstar = degrade_spec(fstar, wth, wlobs)
     #idiff = degrade_spec(idiff, wth, wlobs)
@@ -960,7 +976,7 @@ def compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=0., plots=False):
     beta = ffact*np.pi*np.array(kr)**2#*f_star_spot/fstar#)
     #beta = ffact*np.pi*kr[-1]**2#
     #beta = degrade_spec(beta, wth, wlobs)
-
+    beta = 2.*np.pi*np.array(kr)*np.sin(np.array(kr))
     if plots:
         print(tspot, ffact)
         plt.close('all')
@@ -1070,8 +1086,10 @@ def spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
     '''
 
     #tspot, ffact, beta = par
-    tspot = par[0]
-    ffact = par[1]
+    #tspot = par[0]
+    #ffact = par[1]
+    tspot = par['Tspot']
+    ffact = par['beta']
     mod = compute_deltaf_f(tspot, ffact, wlobs, zz, pardict, fstar=fstar)
     res = np.zeros(len(mod))
     flag = spec >= mod

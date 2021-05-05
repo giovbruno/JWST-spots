@@ -147,12 +147,12 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         mags = [4.5, 6.0, 7.5, 9.0]
         #mags = [6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
-        #mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([10.5])#, 12.5, 13.5, 14.5])
+        mags = np.linspace(10.5, 14.5, 5)
+        #mags = np.array([10.5])#, 12.5, 13.5, 14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
-        ip['aumbra'] = 10.#5.
+        ip['aumbra'] = 5.
         #tcontrast = np.array([-1200.])
     elif tstar == 3500:
         tcontrast = np.arange(-1200, 0, 100)
@@ -192,8 +192,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         tcontrast = np.arange(-900, 0, 100)
         #tcontrast = np.array([-900.])
     elif tstar == 5000.:
-        #tcontrast = np.arange(-1200, 0, 100)
-        tcontrast = np.array([-1200.])
+        tcontrast = np.arange(-1200, 0, 100)
+        #tcontrast = np.array([-1200.])
 
     if len(opers) > 0:
         for mag in mags:
@@ -788,8 +788,8 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
                         + 'contrast_LMfit_josh_jwst.pickle', 'rb')
             resdict = pickle.load(resfile)
             resfile.close()
-            tdiff_output[i, j] = resdict[0].x[0] - tumbra
-            ffact_map[i, j] = resdict[0].x[1]
+            tdiff_output[i, j] = resdict[0].params['Tspot'] - tumbra
+            ffact_map[i, j] = resdict[0].params['beta']
             #betaplanet[i, j] = resdict[0].x[2]
             sizes.append(resdict[1])
         plt.plot(tcontrast, sizes, 'o-', label=str(mag))
@@ -803,8 +803,8 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
 
     plt.close('all')
 
-    labels = [r'Output $\Delta T_\bullet \, [K]$', '$\delta$']#, r'$\beta$']
-    outname = ['Tspot', 'delta']#, 'beta']
+    labels = [r'Output $\Delta T_\bullet$ [K]', r'$\beta$']#, r'$\beta$']
+    outname = ['Tspot', 'beta']#, 'beta']
     for k, tab in enumerate([tdiff_output, ffact_map]):#, betaplanet]):
         fig = plt.figure()
         ax = fig.add_axes([0.13, 0.13, 0.77, 0.77])
@@ -840,24 +840,23 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
 
 def main():
 
-    for m, instrum in enumerate(['NIRSpec_Prism']):#, 'NIRCam']):
-        #for i, asize in enumerate([3.]):
+    for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([0.]): # mu angle 40.
+            for k, theta in enumerate([0., 40.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
-                #if ~np.logical_and.reduce((i == 0, j == 0, k == 0, m == 0)):
                 #cycle(0.3, 0.3, 3500, 5.0, instrum, \
                 #    simulate_transits=False, fit_transits=False, \
                 #    fit_spectra=True, spotted_starmodel=False, \
-                #    inputpars=inputpars, update=False, chi2rplot=True)
+                #    inputpars=inputpars, update=False, chi2rplot=True, \
+                #    model='batman')
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
                     simulate_transits=False, fit_transits=False, \
                     fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
-                    model='batman')
+                    model='KSint')
 
     return
 
