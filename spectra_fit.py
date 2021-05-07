@@ -91,7 +91,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 wspot = res['Percentiles'][0][-4][2]*3
                 # Get transit parameters to compute transit duration
                 # kr, q1, q2, incl, t0
-                get_spot_size(wspot, pardict, res)
+                delta = get_spot_size(wspot, pardict, res)
                 print('Spot angular size:', np.round(np.degrees(delta), 2), \
                             'deg')
             else:
@@ -316,7 +316,8 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                      diffang = 1.
                      maxspotsize = np.pi*np.sin(theta)**2
 
-                minspotsize = np.pi*delta**2 #/ diffang
+                global minspotsize
+                minspotsize = delta**2 #/ diffang
                 params = lmfit.Parameters()
                 if pardict['tstar'] == 5000.:
                     params.add('Tspot', value=4100., min=3601., max=4999.)
@@ -327,7 +328,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 mmu = pardict['starmodel']['mus']
                 f_star = 2.*np.pi*np.trapz(ispecstar*mmu, x=mmu)
                 params.add('beta', value=1., min=0., max=10.)
-                params.add('delta', value=0.01, min=1e-6, max=0.05 + 1e-6)
+                params.add('delta', value=0.01, min=minspotsize, max=1.0)
 
                 soln = lmfit.minimize(spec_res, params, method='leastsq', \
                         args=(A, yerrup, yerrdown, wl, zz, pardict, f_star))
@@ -338,7 +339,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 plt.plot(wl, bsol, label='Best fit')
                 if mcmc:
                     # Let's run an MCMC
-                    res = mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, \
+                    res = run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, \
                                 f_star)
                 if nest:
                     res = nested(soln, A, yerrup, yerrdown, wl, zz, pardict, \
@@ -384,7 +385,6 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
             plt.title('True value: ' + str(int(pardict['tumbra'])) + ' K' \
                + r', best fit: $T_\bullet=$' + str(int(soln.params['Tspot'])) \
                 + ' K', fontsize=16)
-        if LM:
             plt.savefig(plotname + stmod + '_' + pardict['observatory'] \
                         + '_LMfit.pdf')
             plt.show()
@@ -1113,10 +1113,10 @@ def spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
 
 def lnprior(par, pardict):
 
-    tspot, beta, delta = par
+    tspot, beta, ffact = par
     if pardict['tstar'] == 3500:
         if np.logical_or.reduce((tspot < 2300., tspot > 3500., \
-                delta <= 1e-8, delta > 1.0)):
+                ffact <= minspotsize, ffact >= 1.0)):
                 return -np.inf
         else:
             #lnp_ffact = lnp_jeffreys(ffact, 1.0, 1e-6)
@@ -1124,7 +1124,7 @@ def lnprior(par, pardict):
 
     elif pardict['tstar'] == 5000:
         if np.logical_or.reduce((tspot < 3600., tspot > 5000., \
-                delta <= 1e-8, delta > 1.0)):
+                ffact <= minspotsize, ffact >= 1.0)):
                 return -np.inf
         else:
             return 0.
@@ -1154,7 +1154,7 @@ def lnprob(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
                 - 0.5*len(spec)*np.log(2.*np.pi) - 0.5*chi2
         return lnL + lp
 
-def mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
+def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
     '''
     Get posterior distribution for the starspot configuration.
     '''
@@ -1282,7 +1282,8 @@ def get_spot_size(wspot, pardict, dict_chains):
     semimaj = aR*pardict['rstar']*Rsun
     vt = 2.*np.pi*semimaj/(per_planet*86400.)
     x_star = vt*pardict['rstar']*Rsun
-    global delta
-    delta = wspot*x_star/(tdur*86400.)/semimaj
+    #delta = wspot*x_star/(tdur*86400.)/semimaj
+    delta = wspot/tdur*np.arcsin(1./aR)
+    print('Spot-to-star surface ratio: ', delta**2)
 
     return delta

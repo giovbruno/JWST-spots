@@ -123,7 +123,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             global incl
             global t0
             global nspot
-            nspot = 2.05#perc[-5][2]
+            nspot = perc[-5][2]
             wspot = perc[-4][2]
             tspot = perc[-3][2]
             incl = perc[-2][2]
