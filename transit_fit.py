@@ -123,7 +123,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             global incl
             global t0
             global nspot
-            nspot = perc[-5][2]
+            nspot = 2.05#perc[-5][2]
             wspot = perc[-4][2]
             tspot = perc[-3][2]
             incl = perc[-2][2]
@@ -214,9 +214,9 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     # Now, MCMC starting about the optimized solution
     initial = np.array(soln.x)
     if ind == bestbin:
-        ndim, nwalkers = len(initial), 40 #128
+        ndim, nwalkers = len(initial), 128 #40
     else:
-        ndim, nwalkers = len(initial), 20 #64
+        ndim, nwalkers = len(initial), 64 #20
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
             args=([t, y, yerr, model, fix_dict]), threads=8)
 
@@ -233,9 +233,9 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
 
     print("Running burn-in...")
     if ind == bestbin:
-        nsteps = 256#1000
+        nsteps = 512#1000
     else:
-        nsteps = 256#700
+        nsteps = 512#700
     width = 30
     for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
         n = int((width+1)*float(i)/nsteps)
