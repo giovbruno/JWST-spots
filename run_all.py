@@ -32,7 +32,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + '_noscatter/'
+            + '_mag' + str(magstar) + '/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -104,7 +104,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, model=model, mcmc=True)
+          models, resol=res, model=model, mcmc=False)
 
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
@@ -147,8 +147,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         mags = [4.5, 6.0, 7.5, 9.0]
         #mags = [6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
-        #mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([10.5])#, 12.5, 13.5, 14.5])
+        mags = np.linspace(10.5, 14.5, 5)
+        #mags = np.array([10.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)

@@ -12,6 +12,7 @@ import cornerplot
 sys.path.append('../KSint_wrapper/SRC/')
 import ksint_wrapper_fitcontrast
 import get_uncertainties
+import lmfit
 from pdb import set_trace
 plt.ioff()
 
@@ -131,12 +132,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             #if wl <= 2.7:
             initial_params = kr, q1, q2, r0, r1, r2, A
             bounds_model = bounds_model[:-5]
-            #else:
-            #    initial_params = kr, r0, r1, r2, A
-            #    temp = []
-            #    for kk in [0, 3, 4, 5, 6]:
-            #        temp.append(bounds_model[kk])
-            #    bounds_model = temp
+
         fix_dict = {}
         # LM fit
         options= {}

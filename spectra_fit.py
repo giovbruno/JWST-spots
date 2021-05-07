@@ -68,9 +68,6 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
     global unckr
     kr = []
     unckr = []
-    global r0
-    global r1
-    global r2
     r0, r1, r2 = [], [], []
     global polyhere
     polyhere = []
@@ -165,10 +162,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
 
     # Get spot SNR
     spotSNR = A[-1]/np.mean([yerrup[-1], yerrdown[-1]])
-    #wl = wl#[flag]
-    #A = np.array(A[:-1])#[flag]
-    #yerrup = np.array(yerrup[:-1])#[flag]
-    #yerrdown = np.array(yerrdown[:-1])#[flag]
+
     # Here you can change the reference wavelength, according to the instrument
     global wlminPrism
     global wlmaxPrism
@@ -185,12 +179,6 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
     elif pardict['instrument'] == 'NIRCam':
         wref = np.logical_and(wlminNIRCam < wl, wl < wlmaxNIRCam)
     res = np.diff(wl)[0]
-
-    # Remove points with too low error bars
-    #mflag = np.logical_or(yerrup < 0.2*np.median(yerrup), \
-    #                                        yerrdown < 0.2*np.median(yerrdown))
-    #yerrup[mflag] = np.median(yerrup)
-    #yerrdown[mflag] = np.median(yerrdown)
 
     # Use input contrast spectrum
     plt.figure()
@@ -214,7 +202,6 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
         if models == 'josh' and interpolate == 1:
             mat = []
             # interpolate models, make finer grid - only with a few mu values
-            #if not LM:
             for ti in tspot_:
                 tt = format(ti, '2.2e')
                 wl_ = pardict['spotmodels'][tt]['wl']
@@ -240,20 +227,6 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
 
         print(plotname + stmod + '_' + pardict['observatory'])
         print('Fitting ' + stmod + ' models...')
-        # Get spectra with starspot contamination and perform LM fit
-        # First: use true temp to rescale error bars
-        #ww, spec = combine_spectra(pardict, [pardict['tumbra']], 0.05, stmod, \
-        #            wl, res=res, isplot=False)
-        #specint = interp1d(ww, spec, bounds_error=False, \
-        #                                            fill_value='extrapolate')
-        #specA = specint(wl)
-        #boundsm = ([-10, 10])
-        #soln = least_squares(scalespec, [0.], \
-        #            bounds=boundsm, args=(specA, A, yerrup, yerrdown))
-        #chi2r_ = np.sum(scalespec(soln.x, specA, A, yerrup, yerrdown)) \
-        #            /(len(A) - 2)
-        #yerrup *= chi2r_**0.5
-        #yerrdown *= chi2r_**0.5
         if not LM:
             for i, temp in enumerate(tspot_):
                 if temp == pardict['tstar']:
@@ -271,33 +244,18 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                     boundsm = ([0., 0.01])
                 elif pardict['tstar'] == 3500:
                     boundsm = ([0., 0.01])
-                #boundsm = ([-10., 0.], [10., 10.])
                 soln = least_squares(multspec, [1e-3], \
                             bounds=boundsm, args=(specA, A, yerrup, yerrdown))
-                #boundsm = ([0., 10])
-                #soln = least_squares(multspec, [1.], \
-                #            bounds=boundsm, args=(specA, A, yerrup, yerrdown))
-                #soln.x[0] = kr**2
-                #if i % 4 == 0:
-                #    plt.plot(wl, specA, label=str(int(temp)) + ' K')
                 if i % 8 == 0:
                     plt.plot(wl, specA * soln.x[0], label=str(int(temp)) + ' K')
                 # Save true value
                 if temp == pardict['tumbra']:
                     trueval = np.copy(i)
                 chi2 = np.sum(multspec(soln.x, specA, A, yerrup, yerrdown))
-                #chi2 = np.sum(multspec(soln.x, specA, A, yerrup, yerrdown))
-                    #        /(len(A) - 1)
                 print(temp, 'K, spectrum scaling factor:', soln.x[0], \
                                 'chi2r:', chi2/(len(A) - 1))
-                #print(temp, 'K, chi2r:', chi2/(len(A) - 2))
-                #plt.plot(wl, specA, label=str(int(temp)) + ' K')
-                #chi2 = np.sum(scalespec([0.], specA, A, yerrup, yerrdown)) \
-                #            /(len(A) - 1)
                 chi2r[i] = chi2
                 likelihood[i] = np.exp(-0.5*chi2)
-                #likelihood[i] = np.prod(np.exp(-0.5*scalespec(soln.x, \
-                #                specA, A, yerrup, yerrdown)))
                 dict_results[pm][stmod][temp - pardict['tstar']] = likelihood[i]
         else:
             theta = np.arccos(pardict['starmodel']['mus'][pardict['muindex']])
@@ -338,7 +296,6 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                                 fstar=f_star)
                 plt.plot(wl, bsol, label='Best fit')
                 if mcmc:
-                    # Let's run an MCMC
                     res = run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, \
                                 f_star)
                 if nest:
@@ -387,8 +344,6 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 + ' K', fontsize=16)
             plt.savefig(plotname + stmod + '_' + pardict['observatory'] \
                         + '_LMfit.pdf')
-            plt.show()
-            set_trace()
             fout = open(plotname.replace('plot', 'LMfit') + stmod + '_' \
                     + pardict['observatory'] + '.pickle', 'wb')
             pickle.dump([soln, np.round(np.degrees(delta), 2)], fout)
@@ -1046,7 +1001,7 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     # Flux from star + spot
     i_spot = np.hstack(zz(wave, par['Tspot']))
     istar_muspot = pardict['starmodel']['spec'][pardict['muindex']]
-    fstar = fstar - (2.*np.pi*istar_muspot*muspot*np.diff(mmu)[0])* \
+    fstar_spot = fstar - (2.*np.pi*istar_muspot*muspot*np.diff(mmu)[0])* \
                 (1. - par['delta']) \
                 + (2.*np.pi*i_spot*muspot*np.diff(mmu)[0])*par['delta']
 
@@ -1061,40 +1016,26 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
         fth = np.concatenate((fth1, fth2, fth3))
 
     idiff = integ_filter(wth, fth, wave, i_star - i_spot)
-    fstar = integ_filter(wth, fth, wave, fstar)
-    #f_star_spot = integ_filter(wth, fth, wave, f_star_spot)
+    fstar_spot = integ_filter(wth, fth, wave, fstar_spot)
     # Only keep values within filters curves
     wlfl = np.logical_and(wth >= min(wave), wth <= max(wave))
 
     wth = wth[wlfl]
     idiff = idiff[wlfl]
-    fstar = fstar[wlfl]
-    #f_star_spot = f_star_spot[wlfl]
-    #modint = interp1d(wl, f_star_spot)
-    #deltaf_f = modint(w)
-    deltaf_f = degrade_spec(idiff/fstar, wth, wlobs)
-    #deltaf_f /= np.array(polyhere[:-1])
-    #f_star_spot f= degrade_spec(f_star_spot, wth, wlobs)
-    #fstar = degrade_spec(fstar, wth, wlobs)
-    #idiff = degrade_spec(idiff, wth, wlobs)
-    #beta = np.pi*(delta*semimaj)**2/(pardict['rstar']*Rsun)**2*kr**2
-    #ballerini = 1. - 0.5*(1. - f_star_spot/fstar)*ffact
-    #ffact = 1. - (np.cos(kr))**2
-    #ffact = 1. - (np.cos(np.array(kr)/(semimaj/pardict['rstar']/Rsun)))**2
-    beta = par['beta']*np.pi*muspot#*np.diff(mmu)[0]
-    #*np.array(kr)**2#*f_star_spot/fstar#)
-    #beta = ffact*np.pi*kr[-1]**2#
-    #beta = degrade_spec(beta, wth, wlobs)
-    #beta = 2.*np.pi*np.array(kr)*np.sin(np.array(kr))
+    fstar_spot = fstar_spot[wlfl]
+
+    deltaf_f = degrade_spec(idiff/fstar_spot, wth, wlobs)
+
+    beta = par['beta']*np.pi*muspot*np.array(kr)
+
     if plots:
         print(tspot, ffact)
         plt.close('all')
         plt.plot(wlobs, deltaf_f*beta)
         plt.show()
         set_trace()
-    #deltaf_f = deltaf_f*len(pardict['starmodel']['mus'])*beta*kr**2
-    #planetangle = kr*pardict['rstar']*Rsun/semimaj
-    return deltaf_f*beta#[:len(deltaf_f)]#[:-1]#/polyhere[:-1]
+
+    return deltaf_f*beta[:len(deltaf_f)]#/polyhere[:-1]
 
 def spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
     '''
@@ -1119,8 +1060,7 @@ def lnprior(par, pardict):
                 ffact <= minspotsize, ffact >= 1.0)):
                 return -np.inf
         else:
-            #lnp_ffact = lnp_jeffreys(ffact, 1.0, 1e-6)
-            return 0.#lnp_ffact
+            return 0.
 
     elif pardict['tstar'] == 5000:
         if np.logical_or.reduce((tspot < 3600., tspot > 5000., \
