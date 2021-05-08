@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
+from scipy.optimize import minimize, least_squares
 from scipy.special import erf
 import os, sys, pickle
-sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
+#sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
 import emcee
-from autocorr import integrated_time
+#from autocorr import integrated_time
 import batman
 from pytransit import QuadraticModel
 import cornerplot
@@ -138,10 +138,12 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         options= {}
         ftol = 1e-10
         options['ftol'] = ftol
-        nll = lambda *args: -lnlike(*args)
-        soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
-             args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
-             options=options)
+        #nll = lambda *args: -lnlike(*args)
+        #soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
+        #     args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
+        #     options=options)
+        soln = least_squares(residuals, initial_params, bounds=bounds_model, \
+                args=(t, y, yerr, model, fix_dict))
 
     elif model == 'KSint':
         bounds_model = []
@@ -261,19 +263,19 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     lnL = sampler.flatlnprobability
 
     best_sol = samples[lnL.argmax()]
-    try:
-        acor_time = integrated_time(samples, c=10)
-        acor_multiples = np.shape(samples)[0]/acor_time
-        print('Length chains:', np.shape(samples)[0])
-        print('Autocorrelation multiples:', acor_multiples)
-        print('Integrated autocorrelation time')
-        for jpar in np.arange(np.shape(samples)[1]):
-            IAT = emcee.autocorr.integrated_time(samples[:, j])
-            print('IAT multiples for parameter', jpar, ':', \
-                                np.shape(samples)[0]/IAT)
-    except:
-        print('The chain is too short')
-        pass
+    #try:
+    #    acor_time = integrated_time(samples, c=10)
+    #    acor_multiples = np.shape(samples)[0]/acor_time
+    #    print('Length chains:', np.shape(samples)[0])
+    #    print('Autocorrelation multiples:', acor_multiples)
+    #    print('Integrated autocorrelation time')
+    #    for jpar in np.arange(np.shape(samples)[1]):
+    #        IAT = emcee.autocorr.integrated_time(samples[:, j])
+    #        print('IAT multiples for parameter', jpar, ':', \
+    #                            np.shape(samples)[0]/IAT)
+    #except:
+    #    print('The chain is too short')
+    #    pass
 
     print("Mean acceptance fraction: {0:.3f}"
                 .format(np.mean(sampler.acceptance_fraction)))
@@ -537,6 +539,11 @@ def lnlike(pars, t, y, yerr, model, fix_dict):
                 - 0.5*chi2(model, y, yerr)
 
     return lnL
+
+def residuals(pars, t, y, yerr, model, fix_dict):
+
+    model = transit_spot_syst(pars, t, model, fix_dict)
+    return (y - model)**2/yerr**2
 
 def lnp_gauss(par, mm, sigma):
     '''
