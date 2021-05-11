@@ -69,10 +69,6 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     rhostar = 5.14e-5/diz['rstar']*10**diz['loggstar'] #cgs
     global aR
     aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
-    #global inc
-    #inc = 90.
-    #global t0
-    #t0 = 0.10
     global modeltype
     if model == 'batman' or model == 'pytransit':
         # LM fit boundaries - fit for t0 and x0 only on the first channel
@@ -283,9 +279,6 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         else:
             titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', '$C$']
 
-    #truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
-    #                    [None]*(len(titles) - 1)))
-
     truths = None
     if ind == 0 or ind == bestbin:
         cornerplot.cornerplot(samples, titles, truths, \
@@ -301,7 +294,6 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     chains_save = {}
     chains_save['wl'] = wl
     chains_save['LM'] = soln.x
-    #chains_save['Burn_in'] = [p0, lp]
     chains_save['Chains'] = samples
     #chains_save['Starspot_size'] = size
     chains_save['Mean_acceptance_fraction'] \
@@ -395,7 +387,7 @@ def plot_samples(samples, best_sol, t, y, yerr, plotname, \
     for ind in inds:
         sample = samples[ind]
         yTh = transit_spot_syst(sample, xTh, model, fix_dict)
-        frame1.plot(xTh, yTh, 'orange')
+        frame1.plot(xTh, yTh, 'orange', alpha=0.1)
 
     # Plot residuals for best solutiopn
     best_fit = transit_spot_syst(best_sol, t, model, fix_dict)

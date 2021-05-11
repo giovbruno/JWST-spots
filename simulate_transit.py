@@ -19,7 +19,8 @@ import pickle
 import os
 from astropy.io import fits
 homedir = os.path.expanduser('~')
-sys.path.append(homedir + '/Projects/ld_variations/code/Light-curve-tools/')
+#sys.path.append(homedir + '/Projects/ld_variations/code/Light-curve-tools/')
+sys.path.append(homedir + '/Projects/shared_code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
 from pdb import set_trace
@@ -244,6 +245,8 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
             if i < len(xobs) - 2:
                 wl_bin_low = xobs[i] - np.diff(xobs)[i]/2.
                 wl_bin_up = xobs[i] + np.diff(xobs)[i + 1]/2.
+                if wl_bin_low > wl_bin_up:
+                    wl_bin_up = xobs[i] + np.diff(xobs)[i]/2.
             elif i == len(xobs) - 2:
                 wl_bin_low = xobs[i] - np.diff(xobs)[i - 1]/2.
                 wl_bin_up = xobs[i] + np.diff(xobs)[i - 1]/2.
@@ -299,8 +302,6 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #    fix_dict['lat'] = 12.
         fix_dict['lat'] = 0.
         fix_dict['latp'] = 12. # penumbra
-        #fix_dict['rho'] = 1.7*1.408 #5000 K star ~ WASP-52
-        #fix_dict['rho'] = 13.7*1.408 # 3500 K star ~ Kepler-1646
         # Density derived from logg
         fix_dict['rho'] = 5.14e-5/pardict['rstar']*10**pardict['loggstar']  #g/cm3
         fix_dict['P'] = pardict['pplanet']
@@ -351,13 +352,6 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
             umbram = pardict['spotmodels'][tspot_]['spec'][pardict['muindex']]
             #penumbram = np.copy(umbram)
         wave = np.array(wave)
-        #fflag = wave < 60000.
-        #wave = wave[fflag]
-        #starm = starm[fflag]
-        #fflagu = wlumbra < 60000.
-        #umbram = umbram[fflagu]
-
-        #penumbram = penumbram[fflagu]
 
         # Throughput on models
         if pardict['instrument'] == 'NIRCam':
@@ -370,9 +364,6 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
             wth, fth = np.loadtxt(thrfile4, unpack=True)
             wth*= 1e4
 
-        #fflag = np.logical_and(wth > wave.min(), wth < wave.max())
-        #wth = wth[fflag]
-        #fth = fth[fflag]
         starm = integ_filter(wth, fth, wave, starm)
         umbram = integ_filter(wth, fth, wlumbra, umbram)
         if i != len(xobs) - 1:
@@ -383,24 +374,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
             umbram = np.zeros(len(umbram)) + np.mean(umbram)
         contrast = umbram/starm
         #contrastp = penumbram/starm
-
-        #if i == 0:
-        #    chanleft = xobs[i]
-        #elif i > 0 and i < len(xobs) - 2:
-        #    chanleft = (xobs[i] - 0.5*(xobs[i] - xobs[i - 1])) #* u.micrometer
-        #else:
-        #    chanleft = xobs[0]
-        #if i == len(xobs) - 2:
-        #    chanright = xobs[i]
-        #elif i < len(xobs) - 2:
-        #    chanright = (xobs[i] + 0.5*(xobs[i + 1] - xobs[i])) #* u.micrometer
-        #else:
-        #    chanright = xobs[-2]
-        #wlcenter = np.mean([chanleft, chanright]) #* u.micrometer
-        ##wlbin = np.logical_and(wl*1e-4 >= chanleft, wl*1e-4 <= chanright)
-        #wlbin = np.logical_and(wth*1e-4 >= chanleft, wth*1e-4 <= chanright)
-        #params[6] = 1. - np.mean(contrast[wlbin]) # Contrast spot 1
-        params[6] = 1. - contrast[i]
+        params[6] = 1. - contrast[i] # Contrast
         rise.append(params[6])
         # Spot 2
         params[7] = params[4] - 2
@@ -425,44 +399,10 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         rhostar = 5.14e-5/pardict['rstar']*10**pardict['loggstar'] #cgs
         aR = (6.67408e-11*rhostar*1e3*(pardict['pplanet']*86400.)**2 \
                             /(3.*np.pi))**(1./3.)
-        #transit = transit_ - ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
-
-        # Compare KSint and batman model
-        #transit2 = ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
-        #newpar = [params[0], 0.1, fix_dict['incl'], \
-        #    (params[2] + params[3])**2, 0.5*params[2]/(params[2] + params[3])]
-        #transit3 = (transit_model(newpar, tt_, 10.) + gauss(tt_, [0.001, 0.1, \
-        #            0.01, 2.]))*np.polyval([0.01, 0.01, 0.9], tt_)
-        #plt.plot(tt_, transit2)
-        #plt.plot(tt_, transit3)
-        #plt.show()
-        #set_trace()
-        #fitint = interp1d(tt_, transit_, bounds_error=False, \
-        #                fill_value='extrapolate')
-        #transit = fitint(tt)
         # White noise
         uncph = yobs_err[i]*len(tt_)**0.5/2.
         #transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
         yerr = np.zeros(len(transit_)) + uncph
-
-        # Fit this thing with a Gaussian + quadratic function
-        #bounds_model = []
-        #bounds_model.append((0., 1.))
-        #bounds_model.append((0.9, 0.11))
-        #bounds_model.append((0., 1.))
-        #bounds_model.append((0., 10.))
-        #bounds_model.append((-1e6, 1e6))
-        #bounds_model.append((-1e6, 1e6))
-        #bounds_model.append((0., 1e-6))
-
-        #p0 = [0.01, 0.1, 0.01, 2., 0., 0., 0.01]
-        #nll = lambda *args: -lnlike(*args)
-        #soln = minimize(nll, p0, jac=False, method='L-BFGS-B', \
-        #     args=(tt_, transit, yerr), bounds=bounds_model)
-
-        #transit_ += transit_model([params[0], 0.1, pardict['incl'], \
-        #            params[2], params[3]], tt_, 1.0, pp=pardict['pplanet'], \
-        #            semimaj=aR)
 
         plt.close('all')
         plt.errorbar(tt_, transit_, yerr=yerr, fmt='k.')#, capsize=2)

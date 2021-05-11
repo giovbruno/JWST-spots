@@ -853,7 +853,7 @@ def main():
                 #    inputpars=inputpars, update=False, chi2rplot=True, \
                 #    model='batman')
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=False, fit_transits=False, \
+                    simulate_transits=True, fit_transits=True, \
                     fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
                     model='batman')
