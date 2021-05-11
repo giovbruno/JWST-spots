@@ -32,7 +32,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + '/'
+            + '_mag' + str(magstar) + '_noscatter/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -104,7 +104,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, model=model, mcmc=False)
+          models, resol=res, model=model, mcmc=True)
 
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
@@ -848,13 +848,13 @@ def main():
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
                 #cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                #    simulate_transits=False, fit_transits=False, \
+                #    simulate_transits=False, fit_transits=True, \
                 #    fit_spectra=True, spotted_starmodel=False, \
                 #    inputpars=inputpars, update=False, chi2rplot=True, \
                 #    model='batman')
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=False, fit_transits=True, \
-                    fit_spectra=False, spotted_starmodel=False, \
+                    simulate_transits=False, fit_transits=False, \
+                    fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
                     model='batman')
 

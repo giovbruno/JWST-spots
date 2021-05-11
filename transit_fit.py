@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
 from scipy.special import erf
 import os, sys, pickle
+os.environ["OMP_NUM_THREADS"] = "7"
+from multiprocessing import Pool
 #sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
 import emcee
 #from autocorr import integrated_time
@@ -58,7 +60,6 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
                     + '.pic', 'rb')
     lc = pickle.load(lcfile)
     lcfile.close()
-    global wl
     t, y, yerr, wl = lc
 
     global per_planet
@@ -88,6 +89,10 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         bounds_model.append((0.06, 0.15))        # x0 = 0.1051
         bounds_model.append((80., 100.))         # orbit inclination
         bounds_model.append((0.08, 0.12))        # t0
+        bounds = [[], []]
+        for i in np.arange(len(bounds_model)):
+            bounds[0].append(bounds_model[i][0])
+            bounds[1].append(bounds_model[i][1])
 
         # Initial values
         kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, 1e-3, 0., 1.
@@ -129,9 +134,12 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             tspot = perc[-3][2]
             incl = perc[-2][2]
             t0 = perc[-1][2]
-            #if wl <= 2.7:
             initial_params = kr, q1, q2, r0, r1, r2, A
-            bounds_model = bounds_model[:-5]
+            #bounds_model = bounds_model[:-5]
+            bounds = [[], []]
+            for i in np.arange(len(bounds_model[:-5])):
+                bounds[0].append(bounds_model[i][0])
+                bounds[1].append(bounds_model[i][1])
 
         fix_dict = {}
         # LM fit
@@ -142,7 +150,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         #soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
         #     args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
         #     options=options)
-        soln = least_squares(residuals, initial_params, bounds=bounds_model, \
+        soln = least_squares(residuals, initial_params, bounds=bounds, \
                 args=(t, y, yerr, model, fix_dict))
 
     elif model == 'KSint':
@@ -203,97 +211,66 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
              options=options)
 
     print('Likelihood maximimazion results:')
-    print(soln)
+    print(soln.x)
     # This contains the spot signal with the transit model removed
-    plot_best(soln, t, y, yerr, wl, \
+    plot_best(soln, t, y, yerr, \
             diz['chains_folder'] + 'best_LM_' + str(model) + '_' + str(ind) \
             + '.pdf', model=model, fix_dict=fix_dict)
 
     # Now, MCMC starting about the optimized solution
     initial = np.array(soln.x)
     if ind == bestbin:
-        ndim, nwalkers = len(initial), 128 #40
+        ndim, nwalkers = len(initial), 128
     else:
-        ndim, nwalkers = len(initial), 64 #20
+        ndim, nwalkers = len(initial), 64
+
+    #with Pool() as pool:
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
-            args=([t, y, yerr, model, fix_dict]), threads=8)
-
+        args=([t, y, yerr, model, fix_dict]))
     # Variation around LM solution
-    p0 = initial + 0.01*(np.random.randn(nwalkers, ndim))*initial
-                #+ 1e-6*(np.random.randn(nwalkers, ndim))
-
+    pos = initial*(1. + 0.01*(np.random.randn(nwalkers, ndim)))
+            #+ 1e-6*(np.random.randn(nwalkers, ndim))
     # Check condition number (must be < 1e8 to maximise walker linear
     # independence). Problems might be caued by LM results = 0
-    cond = np.linalg.cond(p0)
+    cond = np.linalg.cond(pos)
     while cond >= 1e8:
-        p0 += 1e-4*(np.random.randn(nwalkers, ndim))
-        cond = np.linalg.cond(p0)
+        pos += 1e-4*(np.random.randn(nwalkers, ndim))
+        cond = np.linalg.cond(pos)
 
-    print("Running burn-in...")
-    if ind == bestbin:
-        nsteps = 512#1000
-    else:
-        nsteps = 512#700
-    width = 30
-    for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
-        n = int((width+1)*float(i)/nsteps)
-        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
-    sys.stdout.write("\n")
-    p0, lp, _ = result
-    sampler.reset()
+    print("Running MCMC...")
+    sampler.run_mcmc(pos, 1000, progress=True)
+    # Merge in a single chain
+    samples = sampler.get_chain(discard=300, thin=10, flat=True)
 
-    print("Running production...")
-    if ind == bestbin:
-        nsteps = 256#2500
-    else:
-        nsteps = 256#1500
-    width = 30
-    for i, result in enumerate(sampler.sample(p0, iterations=nsteps, thin=10)):
-        n = int((width+1) * float(i) / nsteps)
-        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
-    sys.stdout.write("\n")
-    pfin, lpfin, _ = result
-
-    # Merge in single chains
-    samples = sampler.flatchain
     # Inclination is symmetric wrt 90°
     if ind == bestbin:
         high_incl = samples[:, -2] > 90.
         samples[high_incl, -2] -= 2.*(samples[high_incl, -2] - 90.)
-    lnL = sampler.flatlnprobability
-
+    lnL = sampler.get_log_prob(discard=300, thin=10, flat=True)
     best_sol = samples[lnL.argmax()]
-    #try:
-    #    acor_time = integrated_time(samples, c=10)
-    #    acor_multiples = np.shape(samples)[0]/acor_time
-    #    print('Length chains:', np.shape(samples)[0])
-    #    print('Autocorrelation multiples:', acor_multiples)
-    #    print('Integrated autocorrelation time')
-    #    for jpar in np.arange(np.shape(samples)[1]):
-    #        IAT = emcee.autocorr.integrated_time(samples[:, j])
-    #        print('IAT multiples for parameter', jpar, ':', \
-    #                            np.shape(samples)[0]/IAT)
-    #except:
-    #    print('The chain is too short')
-    #    pass
 
     print("Mean acceptance fraction: {0:.3f}"
                 .format(np.mean(sampler.acceptance_fraction)))
+    #try:
+    #    tau = sampler.get_autocorr_time()
+    #except AutocorrError:
+    #    print('The chain is shorter than 50 times the integrated ')
+    #    print('autocorrelation time for some parameter.')
+    #    pass
 
     percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
                         for i in np.arange(np.shape(samples)[1])]
-    plot_best(best_sol, t, y, yerr, wl, \
-            diz['chains_folder'] + 'best_MCMC_' + str(model) + '_' \
-                        + str(ind) + '.pdf', model=model, fix_dict=fix_dict)
+
+    plot_samples(samples, best_sol, t, y, yerr, \
+            diz['chains_folder'] + 'samples_MCMC_' + str(model) + '_' \
+            + str(ind) + '.pdf', model=model, fix_dict=fix_dict)
 
     if model != 'KSint':
-        #if wl <= 2.7 and ind == bestbin:
         if ind == bestbin:
             titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
                     r'$r_0$', r'$r_1$', r'$r_2$', \
                     r'$\alpha_\mathrm{spot}$', r'$n$', r'$w_\mathrm{spot}$', \
                     '$t_\mathrm{spot}$', r'$i$', '$t_\mathrm{tr}$']
-        #elif wl <= 2.7 and ind != bestbin:
         else:
             titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
                         r'$r_0$', r'$r_1$', r'$r_2$', \
@@ -306,9 +283,10 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         else:
             titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', '$C$']
 
-    truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
-                        [None]*(len(titles) - 1)))
+    #truths = np.concatenate(([diz['rplanet']/diz['rstar']], \
+    #                    [None]*(len(titles) - 1)))
 
+    truths = None
     if ind == 0 or ind == bestbin:
         cornerplot.cornerplot(samples, titles, truths, \
          diz['chains_folder'] + '/corner_' + model + '_' + str(ind) + '.pdf', \
@@ -323,7 +301,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     chains_save = {}
     chains_save['wl'] = wl
     chains_save['LM'] = soln.x
-    chains_save['Burn_in'] = [p0, lp]
+    #chains_save['Burn_in'] = [p0, lp]
     chains_save['Chains'] = samples
     #chains_save['Starspot_size'] = size
     chains_save['Mean_acceptance_fraction'] \
@@ -344,7 +322,8 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
 def chi2(model, y, yerr):
     return np.sum((model - y)**2/yerr**2)
 
-def plot_best(sol, t, y, yerr, wl, plotname, model='KSint', fix_dict={}):
+def plot_best(sol, t, y, yerr, plotname, model='KSint', fix_dict={}, \
+                alpha=1.):
 
     if type(sol) != np.ndarray: # This is the LM minimization
         params = sol.x
@@ -385,8 +364,45 @@ def plot_best(sol, t, y, yerr, wl, plotname, model='KSint', fix_dict={}):
 
     plt.title('Joint transit-starspot fit', fontsize=18)
     plt.savefig(plotname)
-    #plt.show()
-    #set_trace()
+    plt.close('all')
+
+    return
+
+def plot_samples(samples, best_sol, t, y, yerr, plotname, \
+                    model='KSint', fix_dict={}):
+    '''
+    Plot 100 random samples
+    '''
+    plt.close('all')
+    fig1 = plt.figure(1, figsize=(9, 7))
+    frame2 = fig1.add_axes((.1,.1,.8,.2))
+    frame1 = fig1.add_axes((.1,.3,.8,.6), sharex=frame2)
+    plt.setp(frame1.get_xticklabels(), visible=False)
+
+    frame1.errorbar(t, y, yerr=yerr, fmt='k.')
+    frame1.set_xlim(t.min() - 0.002, t.max(), 0.002)
+    frame1.set_ylabel('Relative flux', fontsize=14)
+
+    frame2.plot([t.min(), t.max()], [0., 0.], 'k--')
+    frame2.set_xlim(t.min() - 0.002, t.max() + 0.002)
+    frame2.set_ylabel('Residuals [ppm]', fontsize=14)
+    frame2.set_xlabel('Time [days]', fontsize=14)
+
+    plt.title('Joint transit-starspot fit', fontsize=16)
+
+    inds = np.random.randint(np.shape(samples)[0], size=100)
+    xTh = np.linspace(t.min(), t.max(), len(t)*10)
+    for ind in inds:
+        sample = samples[ind]
+        yTh = transit_spot_syst(sample, xTh, model, fix_dict)
+        frame1.plot(xTh, yTh, 'orange')
+
+    # Plot residuals for best solutiopn
+    best_fit = transit_spot_syst(best_sol, t, model, fix_dict)
+    frame2.errorbar(t, (y - best_fit)*1e6, \
+            yerr=yerr*1e6, fmt='k.')
+
+    plt.savefig(plotname)
     plt.close('all')
 
     return
@@ -394,38 +410,28 @@ def plot_best(sol, t, y, yerr, wl, plotname, model='KSint', fix_dict={}):
 def transit_spot_syst(par, t, model, fix_dict):
 
     if model != 'KSint':
-        if wl <= 10.:
-            kr = par[0]
-            q1 = par[1]
-            q2 = par[2]
-            r0 = par[3]
-            r1 = par[4]
-            r2 = par[5]
-            Aspot = par[6]
-            #n = par[7]
-            if modeltype == 'fixt0':
-                n = nspot
-                sig = wspot
-                x0 = tspot
-                inclin = incl
-                tc = t0
-            else:
-                n = par[-5]
-                sig = par[-4]
-                x0 = par[-3]
-                inclin = par[-2]
-                tc = par[-1]
-            model = (transit_model([kr, tc, inclin, q1, q2], t, wl) \
-                + gauss(t, [Aspot, x0, sig, n]))*np.polyval([r0, r1, r2], t)
+        kr = par[0]
+        q1 = par[1]
+        q2 = par[2]
+        r0 = par[3]
+        r1 = par[4]
+        r2 = par[5]
+        Aspot = par[6]
+        #n = par[7]
+        if modeltype == 'fixt0':
+            n = nspot
+            sig = wspot
+            x0 = tspot
+            inclin = incl
+            tc = t0
         else:
-            kr = par[0]
-            r0 = par[1]
-            r1 = par[2]
-            r2 = par[3]
-            Aspot = par[5]
-            n = par[6]
-            model = (transit_model([kr, t0, incl], t, wl) \
-             + gauss(t, [Aspot, tspot, wspot, n]))*np.polyval([r0, r1, r2], t)
+            n = par[-5]
+            sig = par[-4]
+            x0 = par[-3]
+            inclin = par[-2]
+            tc = par[-1]
+        model = (transit_model([kr, tc, inclin, q1, q2], t) \
+            + gauss(t, [Aspot, x0, sig, n]))*np.polyval([r0, r1, r2], t)
     else:
         kr = par[0]
         if modeltype == 'fitt0':
@@ -469,7 +475,7 @@ def gauss(x, par):
 
     return y
 
-def transit_model(par, t, wl, u1=0, u2=0, pp=0., semimaj=0.):
+def transit_model(par, t, u1=0, u2=0, pp=0., semimaj=0.):
     '''
     # From stellar density to aR*
     #aR = (6.67408e-11*1e-3*par[2]*(per_planet*86400)**2/(3*np.pi))**(1./3.)
@@ -477,10 +483,9 @@ def transit_model(par, t, wl, u1=0, u2=0, pp=0., semimaj=0.):
     # q1 and q2 (as free parameters) are Kipping's parameters
     '''
 
-    if wl <= 12.7:
-        # Back to u1, u2
-        u1 = 2.*par[3]**0.5*par[4]
-        u2 = par[3]**0.5*(1. - 2.*par[4])
+    # Back to u1, u2
+    u1 = 2.*par[3]**0.5*par[4]
+    u2 = par[3]**0.5*(1. - 2.*par[4])
 
     params = batman.TransitParams()
     params.t0 = par[1]
