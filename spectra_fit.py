@@ -13,8 +13,6 @@ from astropy.io import fits
 from astropy.modeling import blackbody as bb
 from simulate_transit import degrade_spec, integ_filter
 import os
-import sys
-sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
 import emcee
 import dynesty
 from dynesty import plotting as dyplot
@@ -281,13 +279,23 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                     params.add('Tspot', value=4100., min=3601., max=4999.)
                 elif pardict['tstar'] == 3500:
                     params.add('Tspot', value=3100., min=2301., max=3499.)
+                #if pardict['tstar'] == 5000:
+                #    boundsm = ([3601., minspotsize, 0.])
+                #    boundsm = ([4999., minspotsize, 0.])
+                #    p0 = [4100., 0.1, 1.]
+                #elif pardict['tstar'] == 3500:
+                #    boundsm = ([2301., minspotsize, 10.])
+                #    boundsm = ([3499., minspotsize, 10.])
+                #    p0 = [3000., 0.1, 1.]
                 # This is once for the fit
                 ispecstar = np.transpose(pardict['starmodel']['spec'])
                 mmu = pardict['starmodel']['mus']
                 f_star = 2.*np.pi*np.trapz(ispecstar*mmu, x=mmu)
                 params.add('beta', value=1., min=0., max=10.)
                 params.add('delta', value=0.01, min=minspotsize, max=1.0)
-
+                params['beta'].vary = True
+                #soln = least_squares(spec_res, p0, bounds=boundsm, \
+                #        args=(A, yerrup, yerrdown, wl, zz, pardict, f_star))
                 soln = lmfit.minimize(spec_res, params, method='leastsq', \
                         args=(A, yerrup, yerrdown, wl, zz, pardict, f_star))
                 lmfit.printfuncs.report_fit(soln)
@@ -1001,8 +1009,11 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     # Flux from star + spot
     i_spot = np.hstack(zz(wave, par['Tspot']))
     istar_muspot = pardict['starmodel']['spec'][pardict['muindex']]
+    #fstar_spot = fstar - (2.*np.pi*istar_muspot*muspot*np.diff(mmu)[0])* \
+    #            (1. - par['delta']) \
+    #            + (2.*np.pi*i_spot*muspot*np.diff(mmu)[0])*par['delta']
     fstar_spot = fstar - (2.*np.pi*istar_muspot*muspot*np.diff(mmu)[0])* \
-                (1. - par['delta']) \
+                par['delta'] \
                 + (2.*np.pi*i_spot*muspot*np.diff(mmu)[0])*par['delta']
 
     if pardict['instrument'] == 'NIRSpec_Prism':
@@ -1026,7 +1037,7 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
 
     deltaf_f = degrade_spec(idiff/fstar_spot, wth, wlobs)
 
-    beta = par['beta']*np.pi*muspot*np.array(kr)
+    beta = par['beta']*np.pi*np.array(kr)*muspot
 
     if plots:
         print(tspot, ffact)
@@ -1056,15 +1067,17 @@ def lnprior(par, pardict):
 
     tspot, beta, ffact = par
     if pardict['tstar'] == 3500:
-        if np.logical_or.reduce((tspot < 2300., tspot > 3500., \
-                ffact <= minspotsize, ffact >= 1.0)):
+        if np.logical_or.reduce((tspot <= 2300., tspot >= 3500., \
+                ffact <= minspotsize, ffact >= 1.0, \
+                beta <= 0., beta >= 10)):
                 return -np.inf
         else:
             return 0.
 
     elif pardict['tstar'] == 5000:
-        if np.logical_or.reduce((tspot < 3600., tspot > 5000., \
-                ffact <= minspotsize, ffact >= 1.0)):
+        if np.logical_or.reduce((tspot <= 3600., tspot >= 5000., \
+                ffact <= minspotsize, ffact >= 1.0, \
+                beta <= 0., beta >= 10)):
                 return -np.inf
         else:
             return 0.
@@ -1087,7 +1100,7 @@ def lnprob(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
         pars = lmfit.Parameters()
         pars.add('Tspot', value=par[0])
         pars.add('beta', value=par[1])
-        pars.add('delta', value=par[2])
+        pars.add('delta', value=par[1])
         chi2 = np.sum(spec_res(pars, spec, yerrup, yerrdown, wlobs, zz, \
                     pardict, fstar))
         lnL = -0.5*len(spec)*np.log(np.mean([yerrup, yerrdown])) \
@@ -1102,14 +1115,15 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
     # MCMC starting about the optimized solution
     pars = []
     for i in soln.params.keys():
-        pars.append(soln.params[i].value)
+        if soln.params[i].vary:
+            pars.append(soln.params[i].value)
     initial = np.array(pars)
-    ndim, nwalkers = len(initial), 64
+    ndim, nwalkers = len(initial), 16
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
             args=([A, yerrup, yerrdown, wl, zz, pardict, fstar]), threads=8)
 
     # Variation around LM solution
-    p0 = initial + 0.01*(np.random.randn(nwalkers, ndim))*initial
+    p0 = initial*(1. + 0.01*(np.random.randn(nwalkers, ndim)))
                 #+ 1e-6*(np.random.randn(nwalkers, ndim))
 
     # Check condition number (must be < 1e8 to maximise walker linear
@@ -1119,43 +1133,14 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
         p0 += 1e-4*(np.random.randn(nwalkers, ndim))
         cond = np.linalg.cond(p0)
 
-    print("Running burn-in...")
-    nsteps = 64
-    width = 30
-    for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
-        n = int((width+1)*float(i)/nsteps)
-        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
-    sys.stdout.write("\n")
-    p0, lp, _ = result
-    sampler.reset()
-
-    print("Running production...")
-    nsteps = 64
-    width = 30
-    for i, result in enumerate(sampler.sample(p0, iterations=nsteps)):
-        n = int((width+1) * float(i) / nsteps)
-        sys.stdout.write("\r[{0}{1}]".format('#'*n, ' '*(width - n)))
-    sys.stdout.write("\n")
-    pfin, lpfin, _ = result
+    print("Running MCMC...")
+    sampler.run_mcmc(p0, 128, progress=True)
+    # Merge in a single chain
+    samples = sampler.get_chain(discard=30, flat=True)
 
     # Merge in single chains
-    samples = sampler.flatchain
-    lnL = sampler.flatlnprobability
-
+    lnL = sampler.get_log_prob(discard=50, flat=True)
     best_sol = samples[lnL.argmax()]
-    try:
-        acor_time = integrated_time(samples, c=10)
-        acor_multiples = np.shape(samples)[0]/acor_time
-        print('Length chains:', np.shape(samples)[0])
-        print('Autocorrelation multiples:', acor_multiples)
-        print('Integrated autocorrelation time')
-        for jpar in np.arange(np.shape(samples)[1]):
-            IAT = emcee.autocorr.integrated_time(samples[:, j])
-            print('IAT multiples for parameter', jpar, ':', \
-                                np.shape(samples)[0]/IAT)
-    except:
-        print('The chain is too short')
-        pass
 
     print("Mean acceptance fraction: {0:.3f}"
                 .format(np.mean(sampler.acceptance_fraction)))
@@ -1163,7 +1148,7 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
     percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
                         for i in np.arange(np.shape(samples)[1])]
 
-    titles = [r'$T_\bullet$', '$\delta$', r'$\beta$']#, r'$\alpha$']
+    titles = [r'$T_\bullet$', r'$\beta$', r'$\delta$']
     truths = [pardict['tumbra'], None, None]
     cornerplot.cornerplot(samples, titles, truths, \
             pardict['chains_folder'] + '/cornerspec.pdf', ranges=None)
@@ -1171,23 +1156,16 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
     # Save chains
     fout = open(pardict['chains_folder'] + '/chains_spec.pickle', 'wb')
     chains_save = {}
-    #chains_save['wl'] = wl
-    #chains_save['LM'] = soln.x
-    #chains_save['Burn_in'] = [p0, lp]
     chains_save['Chains'] = samples
-    ##chains_save['Starspot_size'] = size
     chains_save['Mean_acceptance_fraction'] \
                                     = np.mean(sampler.acceptance_fraction)
-    #chains_save['Autocorrelation_multiples'] = acor_time
-    #chains_save["Percentiles"] = [percentiles]
     chains_save["ln_L"] = lnL
     pickle.dump(chains_save, fout)
     fout.close()
 
-    #fout = open(diz['chains_folder'] + '/chains_best_' \
-    #            + str(ind) + '.p', 'wb')
-    #pickle.dump(best_sol, fout)
-    #fout.close()
+    fout = open(pardict['chains_folder'] + '/contrast_fit_mcmc.pic', 'wb')
+    pickle.dump(best_sol, fout)
+    fout.close()
 
     return
 

@@ -80,7 +80,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         bounds_model.append((-1., 1.))           # r1
         bounds_model.append((0., 10.))           # r2
         bounds_model.append((1e-6, 1))           # A
-        bounds_model.append((2., 10.))           # n # Flat gaussian
+        bounds_model.append((1., 10.))           # n # Flat gaussian
         bounds_model.append((1e-6, 0.1))         # sigma
         bounds_model.append((0.06, 0.15))        # x0 = 0.1051
         bounds_model.append((80., 100.))         # orbit inclination
@@ -569,7 +569,7 @@ def lnprior(p, model):
             kr, q1, q2, r0, r1, r2, A, n, sig, x0, inclin, ttr = p
             if not np.logical_and.reduce((sig >= 0., 0.06 < x0 < 0.15, \
                         0. <= q1 <= 1.,  0. <= q2 <= 1., \
-                        80. <= inclin <= 100., 2. <= n < 10.)):
+                        80. <= inclin <= 100., 1. <= n < 10.)):
                 return -np.inf
         elif len(p) == 7:
             kr, q1, q2, r0, r1, r2, A = p

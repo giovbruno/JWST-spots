@@ -148,7 +148,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #mags = [6.0, 7.5, 9.0]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        #mags = np.array([10.5])
+        mags = np.array([10.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -192,8 +192,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         tcontrast = np.arange(-900, 0, 100)
         #tcontrast = np.array([-900.])
     elif tstar == 5000.:
-        tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-1200.])
+        #tcontrast = np.arange(-1200, 0, 100)
+        tcontrast = np.array([-300.])
 
     if len(opers) > 0:
         for mag in mags:
@@ -853,7 +853,7 @@ def main():
                 #    inputpars=inputpars, update=False, chi2rplot=True, \
                 #    model='batman')
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=True, fit_transits=True, \
+                    simulate_transits=False, fit_transits=False, \
                     fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
                     model='batman')
