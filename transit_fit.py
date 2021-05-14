@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
 from scipy.special import erf
 import os, sys, pickle
-os.environ["OMP_NUM_THREADS"] = "7"
-from multiprocessing import Pool
-#sys.path.append('/home/giovanni/Shelf/python/emcee/src/emcee/')
 import emcee
 #from autocorr import integrated_time
 import batman
@@ -234,7 +231,8 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         cond = np.linalg.cond(pos)
 
     print("Running MCMC...")
-    sampler.run_mcmc(pos, 1000, progress=True)
+    sampler.run_mcmc(pos, 1000, progress=False)
+
     # Merge in a single chain
     samples = sampler.get_chain(discard=300, thin=10, flat=True)
 

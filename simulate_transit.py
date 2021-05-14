@@ -19,7 +19,6 @@ import pickle
 import os
 from astropy.io import fits
 homedir = os.path.expanduser('~')
-#sys.path.append(homedir + '/Projects/ld_variations/code/Light-curve-tools/')
 sys.path.append(homedir + '/Projects/shared_code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
@@ -197,7 +196,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #xobs -= 0.5
         flag = xobs < 6.5
         xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
-        yobs = np.zeros(len(xobs)) + 0.01
+        #yobs = np.zeros(len(xobs)) + 0.01
         #yobs_err /= 2.
         # Rebin from resolution 100 to res
         #xobs = rebin.rebin_wave(xobs_, 70)
@@ -401,7 +400,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
                             /(3.*np.pi))**(1./3.)
         # White noise
         uncph = yobs_err[i]*len(tt_)**0.5/2.
-        #transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
+        transit_ *= np.random.normal(loc=1., scale=uncph, size=len(tt_))
         yerr = np.zeros(len(transit_)) + uncph
 
         plt.close('all')

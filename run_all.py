@@ -10,6 +10,8 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from scipy.interpolate import interp1d
 import scipy
+import multiprocessing
+import sys
 from pdb import set_trace
 
 def go(magstar, pardict, operation, models, res=10, fittype='grid', \
@@ -145,7 +147,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['instrument'] = instrum
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [6.0, 7.5, 9.0]
+        #mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
         mags = np.array([10.5])
@@ -192,8 +194,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         tcontrast = np.arange(-900, 0, 100)
         #tcontrast = np.array([-900.])
     elif tstar == 5000.:
-        #tcontrast = np.arange(-1200, 0, 100)
-        tcontrast = np.array([-300.])
+        tcontrast = np.arange(-1200, 0, 100)
+        #tcontrast = np.array([-300.])
 
     if len(opers) > 0:
         for mag in mags:
@@ -788,9 +790,10 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
                         + 'contrast_LMfit_josh_jwst.pickle', 'rb')
             resdict = pickle.load(resfile)
             resfile.close()
-            tdiff_output[i, j] = resdict[0].params['Tspot'] - tumbra
-            ffact_map[i, j] = resdict[0].params['beta']
-            #betaplanet[i, j] = resdict[0].x[2]
+            tdiff_output[i, j] = resdict[0].x[0] - tumbra
+                                    #resdict[0].params['Tspot'] - tumbra
+            #ffact_map[i, j] = resdict[0].params['delta']
+            betaplanet[i, j] = resdict[0].x[1]#.params['beta']
             sizes.append(resdict[1])
         plt.plot(tcontrast, sizes, 'o-', label=str(mag))
     plt.xlabel(r'$T_\bullet - T_\star$', fontsize=16)
@@ -803,9 +806,9 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
 
     plt.close('all')
 
-    labels = [r'Output $\Delta T_\bullet$ [K]', r'$\beta$']#, r'$\beta$']
-    outname = ['Tspot', 'beta']#, 'beta']
-    for k, tab in enumerate([tdiff_output, ffact_map]):#, betaplanet]):
+    labels = [r'Output $\Delta T_\bullet$ [K]', r'$\beta$']#, r'$\delta$']
+    outname = ['Tspot', 'beta']#, 'delta']
+    for k, tab in enumerate([tdiff_output, betaplanet]):#, ffact_map]):
         fig = plt.figure()
         ax = fig.add_axes([0.13, 0.13, 0.77, 0.77])
         mm = ax.imshow(tab.T[::-1], extent=(min(mags), \
@@ -838,9 +841,31 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
 
     return
 
-def main():
+def main2(instrument_, theta_):
 
     for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):
+        for j, incl in enumerate([90.]):
+            for k, theta in enumerate([0., 40.]): # mu angle 40.
+                inputpars = {}
+                #inputpars['aumbra'] = asize
+                inputpars['incl'] = incl
+                inputpars['theta'] = theta
+                #cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                #    simulate_transits=False, fit_transits=True, \
+                #    fit_spectra=True, spotted_starmodel=False, \
+                #    inputpars=inputpars, update=False, chi2rplot=True, \
+                #    model='batman')
+                cycle(1.0, 1.0, 5000, 4.5, instrum, \
+                    simulate_transits=True, fit_transits=True, \
+                    fit_spectra=True, spotted_starmodel=False, \
+                    inputpars=inputpars, update=False, chi2rplot=True, \
+                    model='batman')
+
+    return
+
+def main2():
+
+    for m, instrum in enumerate(['NIRSpec_Prism']):#'NIRCam']):#, '
         for j, incl in enumerate([90.]):
             for k, theta in enumerate([0., 40.]): # mu angle 40.
                 inputpars = {}
@@ -860,7 +885,34 @@ def main():
 
     return
 
+def main(tstar, instrument, theta, outfile):
+
+    sys.stdout \
+        = open('/home/giovanni/Projects/jwst_spots/revision1/logs/' \
+            + outfile, 'wt')
+    tstar = int(tstar)
+    theta = int(theta)
+    inputpars = {}
+    inputpars['incl'] = 90.
+    inputpars['theta'] = theta
+    if tstar == 5000:
+        rstar = 1.0
+        rplanet = 1.0
+        loggstar = 4.5
+    elif tstar == 3500:
+        rstar = 0.3
+        rplanet = 0.3
+        loggstar = 5.0
+    cycle(rstar, rplanet, tstar, loggstar, instrument, \
+            simulate_transits=False, fit_transits=False, \
+            fit_spectra=True, spotted_starmodel=False, \
+            inputpars=inputpars, update=False, chi2rplot=True, model='batman')
+
+    return
+
 if __name__ == '__main__':
-    instrument_ = sys.argv[1]
-    inclination_ = sys.argv[2]
-    launch()
+    tstar_ = sys.argv[1]
+    instrument_ = sys.argv[2]
+    theta_ = sys.argv[3]
+    outfile = sys.argv[4]
+    main(tstar_, instrument_, theta_, outfile)
