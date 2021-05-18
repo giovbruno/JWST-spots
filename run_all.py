@@ -106,7 +106,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, model=model, mcmc=True)
+          models, resol=res, model=model, mcmc=False)
 
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
