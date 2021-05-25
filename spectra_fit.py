@@ -288,25 +288,25 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 global minspotsize
                 minspotsize = delta**2 #/ diffang
                 pardict['minspotsize'] = minspotsize
-                #params = lmfit.Parameters()
+                params = lmfit.Parameters()
                 #if pardict['tstar'] == 5000.:
                 #    params.add('Tspot', value=4100., min=3601., max=4999.)
                 #elif pardict['tstar'] == 3500:
                 #    params.add('Tspot', value=3100., min=2301., max=3499.)
                 if pardict['tstar'] == 5000:
-                    boundsm = ([3601., 0.], [4999., 1.])
-                    p0 = [4100., 0.5]
+                    boundsm = ([3601., 1.], [4999., 10.])
+                    p0 = [4100., 5.]
                 elif pardict['tstar'] == 3500:
-                    boundsm = ([2301., 0.], [3499., 1.])
-                    p0 = [3000., 0.5]
-                if pardict['muindex'] == len(pardict['starmodel']['mus']) - 1:
-                    boundsm[0][1] = (1. - np.cos(np.mean(kr - 3*unckr))) / (1. \
-                     - (pardict['starmodel']['mus'][pardict['muindex'] - 1] + np.diff(pardict['starmodel']['mus'])[0]/2.))
-                    #boundsm[1][1] = (1. - np.cos(np.mean(kr + 3*unckr))) / (1. \
-                    #  - (pardict['starmodel']['mus'][pardict['muindex'] - 1] + #np.diff(pardict['starmodel']['mus'])[0]/2.))
-                    p0[1] = np.mean([boundsm[0][1], boundsm[1][1]])
-                else:
-                    boundsm[0][1] = 0.5*np.diff(pardict['starmodel']['mus'])[0]
+                    boundsm = ([2301., 1.], [3499., 10.])
+                    p0 = [3000., 5.]
+                #if pardict['muindex'] == len(pardict['starmodel']['mus']) - 1:
+                #    boundsm[0][1] = (1. - np.cos(np.mean(kr - 3*unckr))) / (1. \
+                #     - (pardict['starmodel']['mus'][pardict['muindex'] - 1] + #np.diff(pardict['starmodel']['mus'])[0]/2.))
+                #    #boundsm[1][1] = (1. - np.cos(np.mean(kr + 3*unckr))) / (1. \
+                #    #  - (pardict['starmodel']['mus'][pardict['muindex'] - 1] + ##np.diff(pardict['starmodel']['mus'])[0]/2.))
+                #    p0[1] = np.mean([boundsm[0][1], boundsm[1][1]])
+                #else:
+                #    boundsm[0][1] = 0.5*np.diff(pardict['starmodel']['mus'])[0]
 
                 # This is once for the fit
                 pardict['beta'] = boundsm[0][1]
@@ -332,6 +332,16 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 if nest:
                     res = nested(soln, A, yerrup, yerrdown, wl, zz, pardict, \
                                 f_star)
+                #if plot_input_spectrum:
+                #    # Plot input contrast spectrum
+                #    cspectrumf = open(pardict['data_folder'] \
+                #                    + 'contrast_spectrum.pic', 'rb')
+                #    cspectrum = pickle.load(cspectrumf)
+                #    plt.plot(cspectrum[0][:-1], \
+                #            cspectrum[1][:-1]/max(cspectrum[1][:-1])*max(A), \
+                #            label='Scaled input')
+                #    plt.legend()
+                #    cspectrumf.close()
             else:
                 params = lmfit.Parameters()
                 if pardict['tstar'] == 3500:
@@ -348,15 +358,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                             zz, pardict)
                 plt.plot(wl, bsol, label='Best fit')
                 plt.plot(wl, bsol2, label='True value')
-                if plot_input_spectrum:
-                    # Plot input contrast spectrum
-                    cspectrumf = open(pardict['data_folder'] \
-                                    + 'contrast_spectrum.pic', 'rb')
-                    cspectrum = pickle.load(cspectrumf)
-                    plt.plot(cspectrum[0][:-1], cspectrum[1][:-1], \
-                            label='Input')
-                    plt.legend()
-                    cspectrumf.close()
+
         plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
         plt.ylabel(r'$\Delta f(\lambda)$', fontsize=16)
         plt.legend(frameon=False)
@@ -379,6 +381,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                     + pardict['observatory'] + '.pickle', 'wb')
             pickle.dump([soln, np.round(np.degrees(delta), 2)], fout)
             fout.close()
+
             return
 
     x, y = [], []
@@ -1037,9 +1040,9 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     #fstar_spot = fstar - (2.*np.pi*istar_muspot*muspot*np.diff(mmu)[0])* \
     #            (1. - par['delta']) \
     #            + (2.*np.pi*i_spot*muspot*np.diff(mmu)[0])*par['delta']
-    fstar_spot = fstar - 2.*np.pi*pardict['minspotsize']\
-                *(istar_muspot*muspot*np.diff(mmu)[0] -
-                 - i_spot*muspot*np.diff(mmu)[0])
+    fstar_spot = fstar# - 2.*np.pi*pardict['minspotsize']\
+                #*(istar_muspot*muspot*np.diff(mmu)[0] -
+                # - i_spot*muspot*np.diff(mmu)[0])
 
     if pardict['instrument'] == 'NIRSpec_Prism':
         wth, fth = np.loadtxt(thrfile4, unpack=True)
@@ -1051,7 +1054,9 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
         wth = np.concatenate((wth1, wth2, wth3))
         fth = np.concatenate((fth1, fth2, fth3))
 
+    #i_star = i_star*(1. - beta) + beta*i_spot
     idiff = integ_filter(wth, fth, wave, i_star - i_spot)
+    #idiff = integ_filter(wth, fth, wave, i_star - beta*i_spot)
     fstar_spot = integ_filter(wth, fth, wave, fstar_spot)
     # Only keep values within filters curves
     wlfl = np.logical_and(wth >= min(wave), wth <= max(wave))
@@ -1063,9 +1068,12 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     deltaf_f = degrade_spec(idiff/fstar_spot, wth, wlobs)
 
     #beta *= np.pi*np.array(kr)*muspot
-    beta *= muspot*np.diff(mmu)[0] # This one works
+    #beta *= np.pi*np.array(kr)**2 # This one works too, if one uses
+                            # F star instead of F star + spot
+    #beta *= muspot*np.diff(mmu)[0] # This one works with F star + spot
     #beta *= 0.5*np.pi*(1. - pardict['minspotsize'])
-
+    #mult = np.pi*np.array(kr)**2
+    beta *= 2.*np.pi*muspot*np.diff(mmu)[0]*np.array(kr)**2
     if plots:
         print(tspot, ffact)
         plt.close('all')
@@ -1073,7 +1081,8 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
         plt.show()
         set_trace()
 
-    return deltaf_f*beta#[:len(deltaf_f)]#/polyhere[:-1]
+    #return deltaf_f*mult[:len(deltaf_f)]
+    return deltaf_f*beta[:len(deltaf_f)]#*polyhere[:-1]
 
 def spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
     '''
@@ -1096,7 +1105,7 @@ def lnprior(par, pardict):
     if pardict['tstar'] == 3500:
         if np.logical_or.reduce((tspot <= 2300., tspot >= 3500., \
                 #ffact <= minspotsize, ffact >= 1.0, \
-                beta <= 0., beta >= 1.)):
+                beta <= 0., beta >= 10.)):
                 return -np.inf
         else:
             return 0.
@@ -1104,7 +1113,7 @@ def lnprior(par, pardict):
     elif pardict['tstar'] == 5000:
         if np.logical_or.reduce((tspot <= 3600., tspot >= 5000., \
                 #ffact <= minspotsize, ffact >= 1.0, \
-                beta <= 0., beta >= 1.)):
+                beta <= 0., beta >= 10.)):
                 return -np.inf
         else:
             return 0.

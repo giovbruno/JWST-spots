@@ -19,7 +19,7 @@ import pickle
 import os
 from astropy.io import fits
 homedir = os.path.expanduser('~')
-sys.path.append(homedir + '/Projects/shared_code/Light-curve-tools/')
+sys.path.append(homedir + '/Projects/git_code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
 from pdb import set_trace

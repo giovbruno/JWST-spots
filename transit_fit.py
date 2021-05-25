@@ -217,7 +217,6 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     else:
         ndim, nwalkers = len(initial), 64
 
-    #with Pool() as pool:
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
         args=([t, y, yerr, model, fix_dict]))
     # Variation around LM solution
@@ -231,16 +230,15 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         cond = np.linalg.cond(pos)
 
     print("Running MCMC...")
-    sampler.run_mcmc(pos, 1000, progress=False)
+    sampler.run_mcmc(pos, 500, progress=False)
 
     # Merge in a single chain
-    samples = sampler.get_chain(discard=300, thin=10, flat=True)
-
+    samples = sampler.get_chain(discard=200, thin=1, flat=True)
     # Inclination is symmetric wrt 90°
     if ind == bestbin:
         high_incl = samples[:, -2] > 90.
         samples[high_incl, -2] -= 2.*(samples[high_incl, -2] - 90.)
-    lnL = sampler.get_log_prob(discard=300, thin=10, flat=True)
+    lnL = sampler.get_log_prob(discard=200, thin=1, flat=True)
     best_sol = samples[lnL.argmax()]
 
     print("Mean acceptance fraction: {0:.3f}"
@@ -384,8 +382,9 @@ def plot_samples(samples, best_sol, t, y, yerr, plotname, \
     xTh = np.linspace(t.min(), t.max(), len(t)*10)
     for ind in inds:
         sample = samples[ind]
-        yTh = transit_spot_syst(sample, xTh, model, fix_dict)
-        frame1.plot(xTh, yTh, 'orange', alpha=0.1)
+        if np.isfinite(lnprior(sample, model)):
+            yTh = transit_spot_syst(sample, xTh, model, fix_dict)
+            frame1.plot(xTh, yTh, 'orange', alpha=0.1)
 
     # Plot residuals for best solutiopn
     best_fit = transit_spot_syst(best_sol, t, model, fix_dict)
@@ -600,7 +599,7 @@ def lnprior(p, model):
                 return lnp_kr
         else:
             kr, q1, q2, contr = p
-            if not np.logical_and.reduce((kr >= 0., 0. < q1 < 1., \
+            if not np.logical_and.reduce((0.01 < kr < 0.2, 0. < q1 < 1., \
                             0. < q2 < 1., 0. < contr <= 1.)):
                     return -np.inf
             else:

@@ -150,7 +150,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([10.5])
+        mags = np.array([14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -195,7 +195,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #tcontrast = np.array([-900.])
     elif tstar == 5000.:
         tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-300.])
+        tcontrast = np.array([-1200.])
 
     if len(opers) > 0:
         for mag in mags:
@@ -207,7 +207,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
-    plot_res3(ip, mags, tcontrast, models)
+    #plot_res3(ip, mags, tcontrast, models)
+    plot_res4(ip, mags, tcontrast, models)
     #map_uncertainties(mags, tcontrast, ip)
     #plot_unc_results(instrum, ip)
 
@@ -841,42 +842,95 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
 
     return
 
-def main2(instrument_, theta_):
+def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
+    '''
+    Represent the results of the LM fits.
+    '''
 
-    for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):
-        for j, incl in enumerate([90.]):
-            for k, theta in enumerate([0., 40.]): # mu angle 40.
-                inputpars = {}
-                #inputpars['aumbra'] = asize
-                inputpars['incl'] = incl
-                inputpars['theta'] = theta
-                #cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                #    simulate_transits=False, fit_transits=True, \
-                #    fit_spectra=True, spotted_starmodel=False, \
-                #    inputpars=inputpars, update=False, chi2rplot=True, \
-                #    model='batman')
-                cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=True, fit_transits=True, \
-                    fit_spectra=True, spotted_starmodel=False, \
-                    inputpars=inputpars, update=False, chi2rplot=True, \
-                    model='batman')
+    plt.close('all')
+    tcontrast = tcontrast[::3]
+    tdiff_output = np.zeros((len(mags), len(tcontrast)))
+    ffact_map = np.zeros((len(mags), len(tcontrast)))
+    betaplanet = np.zeros((len(mags), len(tcontrast)))
+    if ip['tstar'] == 5000:
+        size = 5
+    elif ip['tstar'] == 3500.:
+        size = 3
+    #fig, ax = plt.subplots()
+    marker = ['o', '*', '^', '+', 'x']
+    colour = ['g', 'r', 'c', 'y', 'brown']
+    for i, mag in enumerate(mags):
+        sizes = []
+        for j, td in enumerate(tcontrast): #td
+            #for i, size in enumerate(sizes):
+            uncT = []
+            diffT = [] # This is for the 2D plot
+            tumbra = ip['tstar'] + td
+            homedir = os.path.expanduser('~')
+            project_folder = homedir + '/Projects/jwst_spots/revision1/'
+            instrument = ip['instrument'] + '/'
+            chains_folder = project_folder + instrument + 'star_' \
+                + str(int(ip['tstar'])) + 'K/p' \
+                + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
+                + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
+                + '_spot' + str(int(ip['tstar'] + td)) \
+                + '_i' + str(int(ip['incl'])) \
+                + '_a' + str(int(size)) \
+                + '_theta' + str(int(ip['theta'])) \
+                + '_mag' + str(mag) + '/MCMC/'
+            resfile = open(chains_folder \
+                        + 'contrast_LMfit_josh_jwst.pickle', 'rb')
+            resdict = pickle.load(resfile)
+            resfile.close()
+            tdiff_output[i, j] = resdict[0].x[0] - tumbra
+                                    #resdict[0].params['Tspot'] - tumbra
+            #ffact_map[i, j] = resdict[0].params['delta']
+            betaplanet[i, j] = resdict[0].x[1]#.params['beta']
+            sizes.append(resdict[1])
+            if j == 0:
+                plt.scatter(ip['tstar'] - tumbra, \
+                    ip['tstar'] - resdict[0].x[0], marker=marker[i], s=100, \
+                    c=colour[i], label='{}'.format(mag))
+            else:
+                plt.scatter(ip['tstar'] - tumbra, \
+                    ip['tstar'] - resdict[0].x[0], marker=marker[i], s=100, \
+                    c=colour[i], )
+
+    plt.xlabel(r'True $T_\star - T_\bullet$ [K]', fontsize=16)
+    plt.ylabel(r'Recovered $T_\star - T_\bullet$ [K]', fontsize=16)
+    plt.legend(title='K mag', title_fontsize=14, frameon=False)
+    plt.title('{}'.format(ip['tstar']) + ' K star, ' + instrument.replace('/', \
+                '').replace('_', ' ') \
+                + r', $\theta={}^\circ$'.format(int(ip['theta'])), fontsize=16)
+    #plt.savefig(project_folder + instrument + 'star_' \
+    #        + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
+    #        + '_spotsize_a' + str(int(ip['aumbra'])) \
+    #        + '_theta' + str(int(ip['theta'])) + '.pdf')
+    if ip['tstar'] == 5000:
+        xx = ip['tstar'] - np.linspace(3800., 5000., 100)
+    elif ip['tstar'] == 3500.:
+        xx = ip['tstar'] - np.linspace(2300., 3500., 100)
+    plt.plot(xx, xx, 'k--')
+    plt.show()
+    set_trace()
+    plt.close('all')
 
     return
 
 def main2():
 
-    for m, instrum in enumerate(['NIRSpec_Prism']):#'NIRCam']):#, '
+    for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):#, '
         for j, incl in enumerate([90.]):
             for k, theta in enumerate([0., 40.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
-                #cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                #    simulate_transits=False, fit_transits=True, \
-                #    fit_spectra=True, spotted_starmodel=False, \
-                #    inputpars=inputpars, update=False, chi2rplot=True, \
-                #    model='batman')
+                cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                    simulate_transits=False, fit_transits=False, \
+                    fit_spectra=True, spotted_starmodel=False, \
+                    inputpars=inputpars, update=False, chi2rplot=True, \
+                    model='batman')
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
                     simulate_transits=False, fit_transits=False, \
                     fit_spectra=True, spotted_starmodel=False, \
