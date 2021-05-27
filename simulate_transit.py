@@ -385,13 +385,18 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #tt = np.arange(0., 0.2, 120.*1./86400.)  # M, K
         #tt = np.arange(0., 0.4, 60.*1./86400.) # F star
         # Define in-transit/out-of-transit duration
+        # Use 90-s time resolution and then interpolate, otherwise there is some
+        # numerical error
         if pardict['tstar'] == 3500:
-            #tt_ = np.arange(0.075 - 0.04, 0.125 + 0.04, 90./86400.)
-            tt_ = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
+            tt_ = np.arange(0.075 - 0.04, 0.125 + 0.04, 90./86400.)
+            tt = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
         elif pardict['tstar'] == 5000:
-            #tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 90./86400.)
-            tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
+            tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 90./86400.)
+            tt = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
         transit_ = ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
+        fint = interp1d(tt_, transit_, bounds_error=False, \
+                    fill_value='extrapolate')
+        transit = fint(tt)
         # Subtract planet-only contribution and add pytransit model
         #fix_dict['nspots'] = 0
         # From stellar density
@@ -399,12 +404,12 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         aR = (6.67408e-11*rhostar*1e3*(pardict['pplanet']*86400.)**2 \
                             /(3.*np.pi))**(1./3.)
         # White noise
-        uncph = yobs_err[i]*len(tt_)**0.5/2.
-        transit_ *= np.random.normal(loc=1., scale=uncph, size=len(tt_))
-        yerr = np.zeros(len(transit_)) + uncph
+        uncph = yobs_err[i]*len(tt)**0.5/2.
+        transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
+        yerr = np.zeros(len(transit)) + uncph
 
         plt.close('all')
-        plt.errorbar(tt_, transit_, yerr=yerr, fmt='k.')#, capsize=2)
+        plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
         #plt.plot(tt_, modspot(soln.x, tt_))
         plt.xlabel('Time [d]', fontsize=16)
         plt.ylabel('Relative flux', fontsize=16)
@@ -417,7 +422,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
                         + '_' + pardict['observatory'] + '.pdf')
         savefile = open(pardict['data_folder'] + 'transit_spots' \
                         + '_' + str(i) + '.pic', 'wb')
-        pickle.dump([tt_, transit_, yerr, xobs[i]], savefile)
+        pickle.dump([tt, transit, yerr, xobs[i]], savefile)
         #pickle.dump([tt_, transit3, yerr, xobs[i]], savefile)
         savefile.close()
 

@@ -288,11 +288,12 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 global minspotsize
                 minspotsize = delta**2 #/ diffang
                 pardict['minspotsize'] = minspotsize
-                params = lmfit.Parameters()
+                #params = lmfit.Parameters()
                 #if pardict['tstar'] == 5000.:
-                #    params.add('Tspot', value=4100., min=3601., max=4999.)
+                #    params.add('tspot', value=4100., min=3601., max=4999.)
                 #elif pardict['tstar'] == 3500:
-                #    params.add('Tspot', value=3100., min=2301., max=3499.)
+                #    params.add('tspot', value=3100., min=2301., max=3499.)
+                #params.add('beta', value=5., min=1., max=10.)
                 if pardict['tstar'] == 5000:
                     boundsm = ([3601., 1.], [4999., 10.])
                     p0 = [4100., 5.]
@@ -309,7 +310,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 #    boundsm[0][1] = 0.5*np.diff(pardict['starmodel']['mus'])[0]
 
                 # This is once for the fit
-                pardict['beta'] = boundsm[0][1]
+                #pardict['beta'] = boundsm[0][1]
                 ispecstar = np.transpose(pardict['starmodel']['spec'])
                 mmu = pardict['starmodel']['mus']
                 f_star = 2.*np.pi*np.trapz(ispecstar*mmu, x=mmu)
@@ -317,7 +318,8 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 #params.add('delta', value=minspotsize, min=minspotsize, max=1.0)
                 #params['delta'].vary = False
                 soln = least_squares(spec_res, p0, bounds=boundsm, \
-                        args=(A, yerrup, yerrdown, wl, zz, pardict, f_star))
+                        args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
+                        method='dogbox')
                 #soln = lmfit.minimize(spec_res, params, method='leastsq', \
                 #        args=(A, yerrup, yerrdown, wl, zz, pardict, f_star))
                 #lmfit.printfuncs.report_fit(soln)
@@ -359,8 +361,9 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 plt.plot(wl, bsol, label='Best fit')
                 plt.plot(wl, bsol2, label='True value')
 
-        plt.xlabel('Wavelength [$\mu$m]', fontsize=16)
-        plt.ylabel(r'$\Delta f(\lambda)$', fontsize=16)
+        plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
+        plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
+        plt.tight_layout()
         plt.legend(frameon=False)
         plt.xlim(wl.min() - 0.2, wl.max() + 0.2)
         maxL = np.argmax(likelihood)
@@ -860,7 +863,7 @@ def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1, \
                                 + np.mean(spotref/starref)
         #                        + np.mean(bspot[wref]/bstar[wref]).value
         plt.figure(1)
-        plt.plot(wnew, rise, label=str(ti) + ' K')
+        plt.plot(wnew, rise, label='{}'.format(int(ti)) + ' K')
         #if ti == tspot[-1]:
         #    plt.plot(wl*1e-4, contrast, 'k', alpha=0.5, \
         #                                label='Corresponding black body curves')
@@ -872,17 +875,16 @@ def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1, \
         plt.xlim(0.6, 5.2)
         #plt.ylim(0., 0.95)
         plt.xlabel(r'Wavelength [$\mu$m]', fontsize=14)
-        plt.title('$T_\star=$ ' + str(tstar) + ' K', fontsize=16)
-        leg = plt.legend(frameon=False)
+        plt.title('$T_\star=$ ' + str(int(tstar)) + ' K', fontsize=16)
+        leg = plt.legend(frameon=False, title=r'$T_\bullet$', title_fontsize=12)
         #vp = leg._legend_box._children[-1]._children[0]
         #for c in vp._children:
         #    c._children.reverse()
         #    vp.align="right"
     plt.show()
-    #plt.figure(1)
-    #plt.savefig('/home/giovanni/Projects/jwst_spots/contrast_model_' \
-    #             + str(tstar) + '_mu_' + str(wlrefmin) + '-' + str(wlrefmax) \
-    #            + '.pdf')
+    plt.figure(1)
+    plt.savefig('/home/giovanni/Projects/jwst_spots/contrast_model_' \
+                 + str(int(tstar)) + '_mu.pdf')
     set_trace()
     return
 
@@ -1024,7 +1026,8 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     '''
 
     tspot, beta = par
-    #beta = pardict['beta']
+    #beta = par['beta']
+    #tspot = par['tspot']
     #ffact = 7.99880071e-01
     # Both intensity and flux are needed
     muspot = pardict['starmodel']['mus'][pardict['muindex']]
@@ -1105,7 +1108,7 @@ def lnprior(par, pardict):
     if pardict['tstar'] == 3500:
         if np.logical_or.reduce((tspot <= 2300., tspot >= 3500., \
                 #ffact <= minspotsize, ffact >= 1.0, \
-                beta <= 0., beta >= 10.)):
+                beta <= 1., beta >= 10.)):
                 return -np.inf
         else:
             return 0.
@@ -1113,7 +1116,7 @@ def lnprior(par, pardict):
     elif pardict['tstar'] == 5000:
         if np.logical_or.reduce((tspot <= 3600., tspot >= 5000., \
                 #ffact <= minspotsize, ffact >= 1.0, \
-                beta <= 0., beta >= 10.)):
+                beta <= 1., beta >= 10.)):
                 return -np.inf
         else:
             return 0.
@@ -1154,7 +1157,7 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
     #    if soln.params[i].vary:
     #        pars.append(soln.params[i].value)
     initial = np.array(soln.x)
-    ndim, nwalkers = len(initial), 16
+    ndim, nwalkers = len(initial), 32
     #with Pool() as pool:
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
         args=([A, yerrup, yerrdown, wl, zz, pardict, fstar]), threads=8)
@@ -1170,10 +1173,10 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
         cond = np.linalg.cond(p0)
 
     print("Running MCMC...")
-    sampler.run_mcmc(p0, 128, progress=True)
+    sampler.run_mcmc(p0, 256, progress=False)
 
     # Merge in a single chain
-    samples = sampler.get_chain(discard=30, flat=True)
+    samples = sampler.get_chain(discard=50, flat=True)
 
     # Merge in single chains
     lnL = sampler.get_log_prob(discard=50, flat=True)

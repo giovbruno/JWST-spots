@@ -34,7 +34,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + '_noscatter/'
+            + '_mag' + str(magstar) + '/'#_noscatter/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -106,7 +106,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, model=model, mcmc=False)
+          models, resol=res, model=model, mcmc=True)
 
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
@@ -147,10 +147,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['instrument'] = instrum
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [4.5]
+        #mags = [9.0]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([14.5])
+        #mags = np.array([10.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -195,7 +195,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #tcontrast = np.array([-900.])
     elif tstar == 5000.:
         tcontrast = np.arange(-1200, 0, 100)
-        tcontrast = np.array([-1200.])
+        #tcontrast = np.array([-1200.])
 
     if len(opers) > 0:
         for mag in mags:
@@ -857,7 +857,7 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
     elif ip['tstar'] == 3500.:
         size = 3
     #fig, ax = plt.subplots()
-    marker = ['o', '*', '^', '+', 'x']
+    marker = ['o', '*', '^', 's', 'x']
     colour = ['g', 'r', 'c', 'y', 'brown']
     for i, mag in enumerate(mags):
         sizes = []
@@ -878,62 +878,77 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
                 + '_a' + str(int(size)) \
                 + '_theta' + str(int(ip['theta'])) \
                 + '_mag' + str(mag) + '/MCMC/'
-            resfile = open(chains_folder \
-                        + 'contrast_LMfit_josh_jwst.pickle', 'rb')
+            resfile = open(chains_folder + 'chains_spec.pickle', 'rb')
             resdict = pickle.load(resfile)
             resfile.close()
-            tdiff_output[i, j] = resdict[0].x[0] - tumbra
-                                    #resdict[0].params['Tspot'] - tumbra
+            tspot_chain = resdict['Chains'][:, 0]
+            percentiles = np.percentile(tspot_chain, [15.9, 50, 84.1])
+            yerrup = np.diff(percentiles)[1]
+            yerrdown = np.diff(percentiles)[0]
+            toutput = percentiles[1]
+            #tdiff_output = resdict[0].params['tspot'].value
+            #yerr = resdict[0].params['tspot'].stderr
+            #if yerr == None:
+            #    yerr = 0.
+            if instrument == 'NIRSpec_Prism/':
+                errup = np.sqrt(yerrup**2 + 79.**2)
+                errdown = np.sqrt(yerrup**2 + 79.**2)
+            elif instrument == 'NIRCam/':
+                errup = np.sqrt(yerrup**2 + 62.**2)
+                errdown = np.sqrt(yerrdown**2 + 62.**2)
+            #resdict[0].params['Tspot'] - tumbra
             #ffact_map[i, j] = resdict[0].params['delta']
-            betaplanet[i, j] = resdict[0].x[1]#.params['beta']
-            sizes.append(resdict[1])
+            #betaplanet[i, j] = resdict[0].x[1]#.params['beta']
+            #sizes.append(resdict[1])
+
             if j == 0:
-                plt.scatter(ip['tstar'] - tumbra, \
-                    ip['tstar'] - resdict[0].x[0], marker=marker[i], s=100, \
+                plt.scatter(-(ip['tstar'] - tumbra), \
+                    -(ip['tstar'] - toutput), marker=marker[i], s=100, \
                     c=colour[i], label='{}'.format(mag))
             else:
-                plt.scatter(ip['tstar'] - tumbra, \
-                    ip['tstar'] - resdict[0].x[0], marker=marker[i], s=100, \
-                    c=colour[i], )
-
-    plt.xlabel(r'True $T_\star - T_\bullet$ [K]', fontsize=16)
-    plt.ylabel(r'Recovered $T_\star - T_\bullet$ [K]', fontsize=16)
+                plt.scatter(-(ip['tstar'] - tumbra), \
+                    -(ip['tstar'] - toutput), marker=marker[i], s=100, \
+                    c=colour[i])
+            plt.errorbar(-(ip['tstar'] - tumbra), \
+                    -(ip['tstar'] - toutput), yerr=([errup], [errdown]), \
+                    fmt='-', color=colour[i], capsize=2)
+    plt.xlabel(r'True $T_\star - T_\bullet$ [K]', fontsize=14)
+    plt.ylabel(r'Recovered $T_\star - T_\bullet$ [K]', fontsize=14)
     plt.legend(title='K mag', title_fontsize=14, frameon=False)
     plt.title('{}'.format(ip['tstar']) + ' K star, ' + instrument.replace('/', \
                 '').replace('_', ' ') \
                 + r', $\theta={}^\circ$'.format(int(ip['theta'])), fontsize=16)
-    #plt.savefig(project_folder + instrument + 'star_' \
-    #        + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-    #        + '_spotsize_a' + str(int(ip['aumbra'])) \
-    #        + '_theta' + str(int(ip['theta'])) + '.pdf')
     if ip['tstar'] == 5000:
-        xx = ip['tstar'] - np.linspace(3800., 5000., 100)
+        xx = -(ip['tstar'] - np.linspace(3800., 5000., 100))
     elif ip['tstar'] == 3500.:
-        xx = ip['tstar'] - np.linspace(2300., 3500., 100)
+        xx = -(ip['tstar'] - np.linspace(2300., 3500., 100))
     plt.plot(xx, xx, 'k--')
-    plt.show()
-    set_trace()
+    plt.tight_layout()
+    plt.savefig(project_folder + instrument + 'star_' \
+            + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
+            + '_spotsize_a' + str(int(ip['aumbra'])) \
+            + '_theta' + str(int(ip['theta'])) + '_Tscatter.pdf')
     plt.close('all')
 
     return
 
 def main2():
 
-    for m, instrum in enumerate(['NIRSpec_Prism', 'NIRCam']):#, '
+    for m, instrum in enumerate(['NIRSpec_Prism']):#, 'NIRCam
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([0., 40.]): # mu angle 40.
+            for k, theta in enumerate([40.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
-                cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                    simulate_transits=False, fit_transits=False, \
-                    fit_spectra=True, spotted_starmodel=False, \
-                    inputpars=inputpars, update=False, chi2rplot=True, \
-                    model='batman')
+                #cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                #    simulate_transits=False, fit_transits=False, \
+                #    fit_spectra=True, spotted_starmodel=False, \
+                #    inputpars=inputpars, update=False, chi2rplot=True, \
+                #    model='batman')
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=False, fit_transits=False, \
-                    fit_spectra=True, spotted_starmodel=False, \
+                    simulate_transits=False, fit_transits=True, \
+                    fit_spectra=False, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
                     model='batman')
 
@@ -958,7 +973,7 @@ def main(tstar, instrument, theta, outfile):
         rplanet = 0.3
         loggstar = 5.0
     cycle(rstar, rplanet, tstar, loggstar, instrument, \
-            simulate_transits=False, fit_transits=False, \
+            simulate_transits=True, fit_transits=True, \
             fit_spectra=True, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman')
 

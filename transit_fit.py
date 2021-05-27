@@ -82,10 +82,10 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         bounds_model.append((0.06, 0.15))        # x0 = 0.1051
         bounds_model.append((80., 100.))         # orbit inclination
         bounds_model.append((0.08, 0.12))        # t0
-        bounds = [[], []]
-        for i in np.arange(len(bounds_model)):
-            bounds[0].append(bounds_model[i][0])
-            bounds[1].append(bounds_model[i][1])
+        #bounds = [[], []]
+        #for i in np.arange(len(bounds_model)):
+        #    bounds[0].append(bounds_model[i][0])
+        #    bounds[1].append(bounds_model[i][1])
 
         # Initial values
         kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, 1e-3, 0., 1.
@@ -94,11 +94,11 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         else:
             if diz['tstar'] == 3500:
                 if diz['instrument'] == 'NIRCam':
-                    tspot_ = 0.10#0.115
+                    tspot_ = 0.115
                 else:
                     tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
             else:
-                tspot_ = 0.135 # 0.13
+                tspot_ = 0.135
         A, wspot_ = 1e-3, 0.01
         incl_, t0_ = 89., 0.1
         n = 2.
@@ -128,23 +128,23 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             incl = perc[-2][2]
             t0 = perc[-1][2]
             initial_params = kr, q1, q2, r0, r1, r2, A
-            #bounds_model = bounds_model[:-5]
-            bounds = [[], []]
-            for i in np.arange(len(bounds_model[:-5])):
-                bounds[0].append(bounds_model[i][0])
-                bounds[1].append(bounds_model[i][1])
+            bounds_model = bounds_model[:-5]
+            #bounds = [[], []]
+            #for i in np.arange(len(bounds_model[:-5])):
+            #    bounds[0].append(bounds_model[i][0])
+            #    bounds[1].append(bounds_model[i][1])
 
         fix_dict = {}
         # LM fit
         options= {}
-        ftol = 1e-10
-        options['ftol'] = ftol
-        #nll = lambda *args: -lnlike(*args)
-        #soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
-        #     args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
-        #     options=options)
-        soln = least_squares(residuals, initial_params, bounds=bounds, \
-                args=(t, y, yerr, model, fix_dict))
+        #ftol = 1e-10
+        #options['ftol'] = ftol
+        nll = lambda *args: -lnlike(*args)
+        soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
+             args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
+             options=options)
+        #soln = least_squares(residuals, initial_params, bounds=bounds, \
+        #        args=(t, y, yerr, model, fix_dict), method='trf')
 
     elif model == 'KSint':
         bounds_model = []
@@ -167,7 +167,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
                 else:
                     tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
             else:
-                tspot_ = 0.135 # 0.13
+                tspot_ = 0.1 # 0.13
         incl = 89.
         fout2 = open(diz['data_folder'] + 'KSint_pars.pic', 'rb')
         fix_dict = pickle.load(fout2)
@@ -230,7 +230,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         cond = np.linalg.cond(pos)
 
     print("Running MCMC...")
-    sampler.run_mcmc(pos, 500, progress=False)
+    sampler.run_mcmc(pos, 1000, progress=False)
 
     # Merge in a single chain
     samples = sampler.get_chain(discard=200, thin=1, flat=True)
@@ -581,7 +581,7 @@ def lnprior(p, model):
             lnp_kr = lnp_jeffreys(kr, 0.2, 0.01)
             if len(p) == 12:
                 lnp_incl = lnp_sine(np.radians(inclin), np.radians(90.), \
-                            np.radians(60.))
+                            np.radians(80.))
                 return lnp_kr + lnp_incl
             else:
                 return lnp_kr
