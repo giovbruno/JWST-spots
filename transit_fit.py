@@ -253,7 +253,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
                         for i in np.arange(np.shape(samples)[1])]
 
-    plot_samples(samples, best_sol, t, y, yerr, \
+    plot_samples(samples, best_sol, t, y, yerr, wl, \
             diz['chains_folder'] + 'samples_MCMC_' + str(model) + '_' \
             + str(ind) + '.pdf', model=model, fix_dict=fix_dict)
 
@@ -356,7 +356,7 @@ def plot_best(sol, t, y, yerr, plotname, model='KSint', fix_dict={}, \
 
     return
 
-def plot_samples(samples, best_sol, t, y, yerr, plotname, \
+def plot_samples(samples, best_sol, t, y, yerr, wl, plotname, \
                     model='KSint', fix_dict={}):
     '''
     Plot 100 random samples
@@ -376,7 +376,7 @@ def plot_samples(samples, best_sol, t, y, yerr, plotname, \
     frame2.set_ylabel('Residuals [ppm]', fontsize=14)
     frame2.set_xlabel('Time [days]', fontsize=14)
 
-    plt.title('Joint transit-starspot fit', fontsize=16)
+    plt.title(r'$\lambda = {} \, mu$m'.format(np.round(wl, 2)), fontsize=16)
 
     inds = np.random.randint(np.shape(samples)[0], size=100)
     xTh = np.linspace(t.min(), t.max(), len(t)*10)

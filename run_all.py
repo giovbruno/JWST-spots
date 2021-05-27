@@ -34,7 +34,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + '/'#_noscatter/'
+            + '_mag' + str(magstar) + '/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -154,7 +154,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
-        ip['aumbra'] = 5.
+        ip['aumbra'] = 3.
         #tcontrast = np.array([-1200.])
     elif tstar == 3500:
         tcontrast = np.arange(-1200, 0, 100)
@@ -926,7 +926,7 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
     plt.tight_layout()
     plt.savefig(project_folder + instrument + 'star_' \
             + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-            + '_spotsize_a' + str(int(ip['aumbra'])) \
+            + '_a' + str(int(ip['aumbra'])) \
             + '_theta' + str(int(ip['theta'])) + '_Tscatter.pdf')
     plt.close('all')
 
@@ -936,7 +936,7 @@ def main2():
 
     for m, instrum in enumerate(['NIRSpec_Prism']):#, 'NIRCam
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([40.]): # mu angle 40.
+            for k, theta in enumerate([0.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
@@ -947,8 +947,8 @@ def main2():
                 #    inputpars=inputpars, update=False, chi2rplot=True, \
                 #    model='batman')
                 cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=False, fit_transits=True, \
-                    fit_spectra=False, spotted_starmodel=False, \
+                    simulate_transits=False, fit_transits=False, \
+                    fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
                     model='batman')
 

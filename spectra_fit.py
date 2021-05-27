@@ -192,7 +192,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
     res = np.diff(wl)[0]
 
     # Use input contrast spectrum
-    plt.figure()
+    plt.figure(1)
     plt.errorbar(wl, A, yerr=[yerrup, yerrdown], \
                 fmt='ko', mfc='None', capsize=2)
 
@@ -360,7 +360,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                             zz, pardict)
                 plt.plot(wl, bsol, label='Best fit')
                 plt.plot(wl, bsol2, label='True value')
-
+        plt.figure(1)
         plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
         plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
         plt.tight_layout()
@@ -1173,25 +1173,53 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
         cond = np.linalg.cond(p0)
 
     print("Running MCMC...")
-    sampler.run_mcmc(p0, 256, progress=False)
+    sampler.run_mcmc(p0, 256, progress=True)
 
     # Merge in a single chain
-    samples = sampler.get_chain(discard=50, flat=True)
+    samples = sampler.get_chain(discard=30, flat=True)
 
     # Merge in single chains
-    lnL = sampler.get_log_prob(discard=50, flat=True)
+    lnL = sampler.get_log_prob(discard=30, flat=True)
     best_sol = samples[lnL.argmax()]
 
     print("Mean acceptance fraction: {0:.3f}"
                 .format(np.mean(sampler.acceptance_fraction)))
 
-    percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
+    percentiles = [np.percentile(samples[:,i],[15.9, 50, 84.1]) \
                         for i in np.arange(np.shape(samples)[1])]
+    Tspot_text = str(int(percentiles[0][2])) + r'$^{+' \
+                + str(int(np.diff(percentiles[0])[1])) + r'}_{-' \
+                + str(int(np.diff(percentiles[0])[0])) + r'}$'
+    beta_text = str(np.round(percentiles[1][2], 2)) + r'$^{+' \
+                + str(np.round(np.diff(percentiles[1])[1], 2)) + r'}_{-' \
+                + str(np.round(np.diff(percentiles[1])[0], 2)) + r'}$'
 
     titles = [r'$T_\bullet$', r'$\beta$']#, r'$\delta$']
     truths = [pardict['tumbra'], None]#, None]
     cornerplot.cornerplot(samples, titles, truths, \
             pardict['chains_folder'] + '/cornerspec.pdf', ranges=None)
+
+
+    # Plot 100 models from the posteriors
+    plt.figure(42)
+    inds = np.random.randint(np.shape(samples)[0], size=10)
+    for ind in inds:
+        sample = samples[ind]
+        if np.isfinite(lnprior(sample, pardict)):
+            bsol = compute_deltaf_f(sample, wl, zz, pardict, fstar=fstar)
+            plt.plot(wl, bsol, 'c', alpha=0.1)
+    plt.errorbar(wl, A, yerr=[yerrup, yerrdown], \
+                                fmt='ko', mfc='None', capsize=2)
+    plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
+    plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
+    plt.text(3.5, max(A) - 0.002,'{}'.format(pardict['tstar']) + ' K star\n' \
+      + pardict['instrument'].replace('/', '').replace('_', ' ') \
+      + '\n' + r'$\theta={}^\circ$'.format(int(pardict['theta'])) + '\n' \
+      + r'True $T_\bullet=$' + str(int(pardict['tumbra'])) \
+      + ' K\n' + 'Fit: \n' + r'$T_\bullet = $' + Tspot_text + '\n' \
+      + r'$\beta=$' + beta_text, fontsize=12)
+    plt.tight_layout()
+    plt.savefig(pardict['chains_folder'] + '/samples_spec.pdf')
 
     # Save chains
     fout = open(pardict['chains_folder'] + '/chains_spec.pickle', 'wb')
