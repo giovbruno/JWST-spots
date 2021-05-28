@@ -150,7 +150,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #mags = [9.0]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        #mags = np.array([10.5])
+        #mags = np.array([14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -192,10 +192,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     if tstar == 3500:
     # Very cool models will only be used for the fit
         tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-900.])
+        #tcontrast = np.array([-600.])
     elif tstar == 5000.:
         tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-1200.])
+        #tcontrast = np.array([-300.])
 
     if len(opers) > 0:
         for mag in mags:
@@ -936,21 +936,21 @@ def main2():
 
     for m, instrum in enumerate(['NIRSpec_Prism']):#, 'NIRCam
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([0.]): # mu angle 40.
+            for k, theta in enumerate([40.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
-                #cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                #    simulate_transits=False, fit_transits=False, \
-                #    fit_spectra=True, spotted_starmodel=False, \
-                #    inputpars=inputpars, update=False, chi2rplot=True, \
-                #    model='batman')
-                cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                    simulate_transits=False, fit_transits=False, \
+                cycle(0.3, 0.3, 3500, 5.0, instrum, \
+                    simulate_transits=False, fit_transits=True, \
                     fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
                     model='batman')
+                #cycle(1.0, 1.0, 5000, 4.5, instrum, \
+                #    simulate_transits=False, fit_transits=True, \
+                #    fit_spectra=True, spotted_starmodel=False, \
+                #    inputpars=inputpars, update=False, chi2rplot=True, \
+                #    model='batman')
 
     return
 

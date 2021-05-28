@@ -76,11 +76,11 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         bounds_model.append((-1., 1.))           # r0
         bounds_model.append((-1., 1.))           # r1
         bounds_model.append((0., 10.))           # r2
-        bounds_model.append((1e-6, 1))           # A
+        bounds_model.append((1e-4, 1))           # A
         bounds_model.append((1., 10.))           # n # Flat gaussian
-        bounds_model.append((1e-6, 0.1))         # sigma
+        bounds_model.append((np.diff(t).min(), 0.1))         # sigma
         bounds_model.append((0.06, 0.15))        # x0 = 0.1051
-        bounds_model.append((80., 100.))         # orbit inclination
+        bounds_model.append((80., 90.))          # orbit inclination
         bounds_model.append((0.08, 0.12))        # t0
         #bounds = [[], []]
         #for i in np.arange(len(bounds_model)):
@@ -90,13 +90,13 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         # Initial values
         kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, 1e-3, 0., 1.
         if diz['theta'] == 0.:
-            tspot_ = 0.1#0.095 #0.1
+            tspot_ = 0.1#0.095
         else:
             if diz['tstar'] == 3500:
-                if diz['instrument'] == 'NIRCam':
-                    tspot_ = 0.115
-                else:
-                    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
+                #if diz['instrument'] == 'NIRCam':
+                tspot_ = 0.115
+                #else:
+                #    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
             else:
                 tspot_ = 0.135
         A, wspot_ = 1e-3, 0.01
@@ -376,7 +376,7 @@ def plot_samples(samples, best_sol, t, y, yerr, wl, plotname, \
     frame2.set_ylabel('Residuals [ppm]', fontsize=14)
     frame2.set_xlabel('Time [days]', fontsize=14)
 
-    plt.title(r'$\lambda = {} \, mu$m'.format(np.round(wl, 2)), fontsize=16)
+    plt.title(r'$\lambda = {} \, \mu$m'.format(np.round(wl, 2)), fontsize=16)
 
     inds = np.random.randint(np.shape(samples)[0], size=100)
     xTh = np.linspace(t.min(), t.max(), len(t)*10)
