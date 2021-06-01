@@ -10,7 +10,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from scipy.interpolate import interp1d
 import scipy
-import multiprocessing
+from dynesty import utils as dyfunc
 import sys
 from pdb import set_trace
 
@@ -106,7 +106,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, model=model, mcmc=True)
+          models, resol=res, model=model, mcmc=False, nest=True)
 
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
@@ -141,24 +141,25 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['tstar'] = tstar
     ip['loggstar'] = loggstar
     ip['tpenumbra'] = 5500
-    #ip['aumbra'] = inputpars['aumbra']
+    ip['aumbra'] = inputpars['aumbra']
     ip['incl'] = inputpars['incl']
     ip['theta'] = inputpars['theta']
     ip['instrument'] = instrum
+
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [9.0]
+        #mags = [6.0]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
         #mags = np.array([14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
-        ip['aumbra'] = 3.
+        #ip['aumbra'] = 3.
         #tcontrast = np.array([-1200.])
     elif tstar == 3500:
         tcontrast = np.arange(-1200, 0, 100)
-        ip['aumbra'] = 3.
+        #ip['aumbra'] = 3.
         #tcontrast = np.array([-600.])
     opers = []
     if simulate_transits:
@@ -192,10 +193,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     if tstar == 3500:
     # Very cool models will only be used for the fit
         tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-600.])
+        tcontrast = np.array([-600.])
     elif tstar == 5000.:
         tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-300.])
+        tcontrast = np.array([-900.])
 
     if len(opers) > 0:
         for mag in mags:
@@ -208,7 +209,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res3(ip, mags, tcontrast, models)
-    plot_res4(ip, mags, tcontrast, models)
+    #plot_res4(ip, mags, tcontrast, models)
     #map_uncertainties(mags, tcontrast, ip)
     #plot_unc_results(instrum, ip)
 
@@ -853,7 +854,7 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
     ffact_map = np.zeros((len(mags), len(tcontrast)))
     betaplanet = np.zeros((len(mags), len(tcontrast)))
     if ip['tstar'] == 5000:
-        size = 5
+        size = 3
     elif ip['tstar'] == 3500.:
         size = 3
     #fig, ax = plt.subplots()
@@ -878,24 +879,33 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
                 + '_a' + str(int(size)) \
                 + '_theta' + str(int(ip['theta'])) \
                 + '_mag' + str(mag) + '/MCMC/'
-            resfile = open(chains_folder + 'chains_spec.pickle', 'rb')
+            #resfile = open(chains_folder + 'chains_spec.pickle', 'rb')
+            resfile = open(chains_folder + '/nested_spec.pickle', 'rb')
             resdict = pickle.load(resfile)
             resfile.close()
-            tspot_chain = resdict['Chains'][:, 0]
-            percentiles = np.percentile(tspot_chain, [15.9, 50, 84.1])
-            yerrup = np.diff(percentiles)[1]
-            yerrdown = np.diff(percentiles)[0]
-            toutput = percentiles[1]
+            #tspot_chain = resdict['Chains'][:, 0]
+            #percentiles = np.percentile(tspot_chain, [15.9, 50., 84.1])
+
+            # Quantiles
+            samples = resdict.samples  # samples
+            weights = np.exp(resdict.logwt - resdict.logz[-1])  # normalized weights
+            quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                        weights=weights) for samps in samples.T]
+
+            yerrup = np.diff(quantiles[0])[1]
+            yerrdown = np.diff(quantiles[0])[0]
+            toutput = quantiles[0][1]
+
             #tdiff_output = resdict[0].params['tspot'].value
             #yerr = resdict[0].params['tspot'].stderr
             #if yerr == None:
             #    yerr = 0.
             if instrument == 'NIRSpec_Prism/':
-                errup = np.sqrt(yerrup**2 + 79.**2)
-                errdown = np.sqrt(yerrup**2 + 79.**2)
+                errup = np.sqrt(yerrup**2)# + 79.**2)
+                errdown = np.sqrt(yerrup**2)# + 79.**2)
             elif instrument == 'NIRCam/':
-                errup = np.sqrt(yerrup**2 + 62.**2)
-                errdown = np.sqrt(yerrdown**2 + 62.**2)
+                errup = np.sqrt(yerrup**2)# + 62.**2)
+                errdown = np.sqrt(yerrdown**2)# + 62.**2)
             #resdict[0].params['Tspot'] - tumbra
             #ffact_map[i, j] = resdict[0].params['delta']
             #betaplanet[i, j] = resdict[0].x[1]#.params['beta']
@@ -912,6 +922,7 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
             plt.errorbar(-(ip['tstar'] - tumbra), \
                     -(ip['tstar'] - toutput), yerr=([errup], [errdown]), \
                     fmt='-', color=colour[i], capsize=2)
+
     plt.xlabel(r'True $T_\star - T_\bullet$ [K]', fontsize=14)
     plt.ylabel(r'Recovered $T_\star - T_\bullet$ [K]', fontsize=14)
     plt.legend(title='K mag', title_fontsize=14, frameon=False)
@@ -926,35 +937,36 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
     plt.tight_layout()
     plt.savefig(project_folder + instrument + 'star_' \
             + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-            + '_a' + str(int(ip['aumbra'])) \
+            + '_' + str(int(ip['tstar'])) + '_a' + str(int(ip['aumbra'])) \
             + '_theta' + str(int(ip['theta'])) + '_Tscatter.pdf')
     plt.close('all')
 
     return
 
-def main2():
+def main2(spotsize):
 
-    for m, instrum in enumerate(['NIRSpec_Prism']):#, 'NIRCam
+    for m, instrum in enumerate(['NIRCam', 'NIRSpec_Prism']):
         for j, incl in enumerate([90.]):
-            for k, theta in enumerate([40.]): # mu angle 40.
+            for k, theta in enumerate([0., 40.]): # mu angle 40.
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
+                inputpars['aumbra'] = spotsize
                 cycle(0.3, 0.3, 3500, 5.0, instrum, \
                     simulate_transits=False, fit_transits=True, \
                     fit_spectra=True, spotted_starmodel=False, \
                     inputpars=inputpars, update=False, chi2rplot=True, \
                     model='batman')
-                #cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                #    simulate_transits=False, fit_transits=True, \
-                #    fit_spectra=True, spotted_starmodel=False, \
-                #    inputpars=inputpars, update=False, chi2rplot=True, \
-                #    model='batman')
+                cycle(1.0, 1.0, 5000, 4.5, instrum, \
+                    simulate_transits=False, fit_transits=True, \
+                    fit_spectra=True, spotted_starmodel=False, \
+                    inputpars=inputpars, update=False, chi2rplot=True, \
+                    model='batman')
 
     return
 
-def main(tstar, instrument, theta, outfile):
+def main(tstar, instrument, theta, spotsize, outfile):
 
     sys.stdout \
         = open('/home/giovanni/Projects/jwst_spots/revision1/logs/' \
@@ -964,6 +976,7 @@ def main(tstar, instrument, theta, outfile):
     inputpars = {}
     inputpars['incl'] = 90.
     inputpars['theta'] = theta
+    inputpars['aumbra'] = float(spotsize)
     if tstar == 5000:
         rstar = 1.0
         rplanet = 1.0
@@ -983,5 +996,6 @@ if __name__ == '__main__':
     tstar_ = sys.argv[1]
     instrument_ = sys.argv[2]
     theta_ = sys.argv[3]
-    outfile = sys.argv[4]
-    main(tstar_, instrument_, theta_, outfile)
+    spotsize_ = sys.argv[4]
+    outfile = sys.argv[5]
+    main(tstar_, instrument_, theta_, spotsize_, outfile)

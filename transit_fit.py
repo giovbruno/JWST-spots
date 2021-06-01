@@ -4,7 +4,7 @@ from scipy.optimize import minimize, least_squares
 from scipy.special import erf
 import os, sys, pickle
 import emcee
-#from autocorr import integrated_time
+from emcee.autocorr import integrated_time
 import batman
 from pytransit import QuadraticModel
 import cornerplot
@@ -71,14 +71,18 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         # LM fit boundaries - fit for t0 and x0 only on the first channel
         bounds_model = []
         bounds_model.append((0.01, 0.2))         # rp/r*
-        bounds_model.append((0.0, 1.0))          # q1 from Kipping+2013
-        bounds_model.append((0.0, 1.0))          # q2
+        if diz['tstar'] == 3500:
+            bounds_model.append((0.01, 0.2))          # q1 from Kipping+2013
+            bounds_model.append((0.15, 0.3))          # q2
+        elif diz['tstar'] == 5000:
+            bounds_model.append((0.15, 0.3))          # q1 from Kipping+2013
+            bounds_model.append((0.15, 0.3))
         bounds_model.append((-1., 1.))           # r0
         bounds_model.append((-1., 1.))           # r1
         bounds_model.append((0., 10.))           # r2
-        bounds_model.append((1e-4, 1))           # A
+        bounds_model.append((1e-3, 1))           # A
         bounds_model.append((1., 10.))           # n # Flat gaussian
-        bounds_model.append((np.diff(t).min(), 0.1))         # sigma
+        bounds_model.append((np.diff(t).min()*3, 0.1))         # sigma
         bounds_model.append((0.06, 0.15))        # x0 = 0.1051
         bounds_model.append((80., 90.))          # orbit inclination
         bounds_model.append((0.08, 0.12))        # t0
@@ -88,7 +92,11 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         #    bounds[1].append(bounds_model[i][1])
 
         # Initial values
-        kr, q1, q2, r0, r1, r2 = 0.09, 0.3, 0.3, 1e-3, 0., 1.
+        kr, r0, r1, r2 = 0.09, -1e-3, -1e-3, 1.
+        if diz['tstar'] == 3500:
+            q1, q2 = 0.1, 0.15
+        elif diz['tstar'] == 5000:
+            q1, q2 = 0.2, 0.22
         if diz['theta'] == 0.:
             tspot_ = 0.1#0.095
         else:
@@ -99,7 +107,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
                 #    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
             else:
                 tspot_ = 0.135
-        A, wspot_ = 1e-3, 0.01
+        A, wspot_ = 2e-3, 0.01
         incl_, t0_ = 89., 0.1
         n = 2.
 
@@ -113,7 +121,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             modeltype = 'fixt0'
             # Extract spot time from first wavelength bin
             ffopen = open(diz['chains_folder'] + 'chains_' + str(model) \
-                + '_' + str(bestbin) + '.pickle', 'rb')
+                + '_' + str(bestbin) + '.pic', 'rb')
             res = pickle.load(ffopen)
             perc = res['Percentiles'][0]
             # These will be fixed in the fit
@@ -214,9 +222,10 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     initial = np.array(soln.x)
     if ind == bestbin:
         ndim, nwalkers = len(initial), 128
+        iters = 2000
     else:
         ndim, nwalkers = len(initial), 64
-
+        iters = 1000
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
         args=([t, y, yerr, model, fix_dict]))
     # Variation around LM solution
@@ -230,27 +239,25 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
         cond = np.linalg.cond(pos)
 
     print("Running MCMC...")
-    sampler.run_mcmc(pos, 1000, progress=False)
+
+    sampler.run_mcmc(pos, iters, progress=False)
 
     # Merge in a single chain
-    samples = sampler.get_chain(discard=200, thin=1, flat=True)
+    samples = sampler.get_chain(discard=300, thin=1, flat=True)
     # Inclination is symmetric wrt 90°
     if ind == bestbin:
         high_incl = samples[:, -2] > 90.
         samples[high_incl, -2] -= 2.*(samples[high_incl, -2] - 90.)
-    lnL = sampler.get_log_prob(discard=200, thin=1, flat=True)
+    lnL = sampler.get_log_prob(discard=300, thin=1, flat=True)
     best_sol = samples[lnL.argmax()]
-
     print("Mean acceptance fraction: {0:.3f}"
                 .format(np.mean(sampler.acceptance_fraction)))
-    #try:
-    #    tau = sampler.get_autocorr_time()
-    #except AutocorrError:
-    #    print('The chain is shorter than 50 times the integrated ')
-    #    print('autocorrelation time for some parameter.')
-    #    pass
+    # Inspect convergence using the integrated autocorrelation time
+    # (https://emcee.readthedocs.io/en/stable/tutorials/autocorr/)
+    autocorr_time = [integrated_time(i, quiet=True)[0] for i in samples.T]
+    autocorr_multiples = np.shape(samples)[0]/np.array(autocorr_time)
 
-    percentiles = [np.percentile(samples[:,i],[4.55, 15.9, 50, 84.1, 95.45]) \
+    percentiles = [np.percentile(samples[:,i], [4.55, 15.9, 50, 84.1, 95.45]) \
                         for i in np.arange(np.shape(samples)[1])]
 
     plot_samples(samples, best_sol, t, y, yerr, wl, \
@@ -259,12 +266,12 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
 
     if model != 'KSint':
         if ind == bestbin:
-            titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
+            titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', \
                     r'$r_0$', r'$r_1$', r'$r_2$', \
                     r'$\alpha_\mathrm{spot}$', r'$n$', r'$w_\mathrm{spot}$', \
                     '$t_\mathrm{spot}$', r'$i$', '$t_\mathrm{tr}$']
         else:
-            titles = [r'$R_\mathrm{p}/R_\star$', r'$q_1$', r'$q_2$', \
+            titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', \
                         r'$r_0$', r'$r_1$', r'$r_2$', \
                         r'$\alpha_\mathrm{spot}$']
     else:
@@ -286,7 +293,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
 
     # Save chains
     fout = open(diz['chains_folder'] + '/chains_' + str(model) + '_' + str(ind) \
-                                                    + '.pickle', 'wb')
+                                                    + '.pic', 'wb')
     chains_save = {}
     chains_save['wl'] = wl
     chains_save['LM'] = soln.x
@@ -294,16 +301,16 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     #chains_save['Starspot_size'] = size
     chains_save['Mean_acceptance_fraction'] \
                                     = np.mean(sampler.acceptance_fraction)
-    #chains_save['Autocorrelation_multiples'] = acor_time
+    chains_save['Autocorr_multiples'] = autocorr_multiples
     chains_save["Percentiles"] = [percentiles]
     chains_save["ln_L"] = lnL
     pickle.dump(chains_save, fout)
     fout.close()
 
-    fout = open(diz['chains_folder'] + '/chains_best_' + str(model) \
-                + '_' + str(ind) + '.p', 'wb')
-    pickle.dump(best_sol, fout)
-    fout.close()
+    #fout = open(diz['chains_folder'] + '/chains_best_' + str(model) \
+    #            + '_' + str(ind) + '.p', 'wb')
+    #pickle.dump(best_sol, fout)
+    #fout.close()
 
     return
 
@@ -473,8 +480,8 @@ def transit_model(par, t, u1=0, u2=0, pp=0., semimaj=0.):
     '''
 
     # Back to u1, u2
-    u1 = 2.*par[3]**0.5*par[4]
-    u2 = par[3]**0.5*(1. - 2.*par[4])
+    #u1 = 2.*par[3]**0.5*par[4]
+    #u2 = par[3]**0.5*(1. - 2.*par[4])
 
     params = batman.TransitParams()
     params.t0 = par[1]
@@ -490,7 +497,8 @@ def transit_model(par, t, u1=0, u2=0, pp=0., semimaj=0.):
     params.inc = par[2] # in degrees
     params.ecc = 0.
     params.w = 0.
-    params.u = [u1, u2]
+    params.u = [par[3], par[4]]
+    #params.u = [u1, u2]
     params.limb_dark = "quadratic"
 
     m = batman.TransitModel(params, t)
@@ -580,6 +588,8 @@ def lnprior(p, model):
             #lnp_kr = np.log(1./(kr*np.log(0.2/0.01))) # Jeffreys prior
             lnp_kr = lnp_jeffreys(kr, 0.2, 0.01)
             if len(p) == 12:
+                #if inclin > 90.:
+                #    inclin -= 2.*(inclin - 90.)
                 lnp_incl = lnp_sine(np.radians(inclin), np.radians(90.), \
                             np.radians(80.))
                 return lnp_kr + lnp_incl
@@ -625,3 +635,11 @@ def starspot_size(diz, samples, channel):
     plt.savefig(diz['chains_folder'] + 'spot_size' + str(channel) + '.pdf')
 
     return size
+
+#def gelmanrubin(chains):
+#    '''
+#    Calculates convergence criterion according to Gelman-Rubin (1992).
+#    This uses a random chain, as chains are not independent
+#    (https://emcee.readthedocs.io/en/stable/tutorials/autocorr/#autocorr).
+#    '''
+#    m = np.random.randint(0., np.shape(chains)[1])

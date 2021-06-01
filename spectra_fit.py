@@ -18,6 +18,7 @@ import emcee
 import dynesty
 from dynesty import plotting as dyplot
 from dynesty import utils as dyfunc
+from dynesty import DynamicNestedSampler
 import cornerplot
 from transit_fit import transit_model
 import multiprocessing
@@ -71,12 +72,12 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
     global polyhere
     polyhere = []
     for i in np.concatenate((np.arange(expchan - 1), [-1])):
-        try:
-            ffopen = open(pardict['chains_folder'] + 'chains_' \
-                    + str(model) + '_' + str(i) + '.pickle', 'rb')
-        except FileNotFoundError: # old version
-            ffopen = open(pardict['chains_folder'] + 'chains_' \
-                    + str(i) + '.pickle', 'rb')
+        #try:
+        ffopen = open(pardict['chains_folder'] + 'chains_' \
+                + str(model) + '_' + str(i) + '.pic', 'rb')
+        #except FileNotFoundError: # old version
+        #    ffopen = open(pardict['chains_folder'] + 'chains_' \
+        #            + str(i) + '.pic', 'rb')
         res = pickle.load(ffopen)
         if model != 'KSint':
             if i == bestbin:
@@ -558,7 +559,7 @@ def scalespec2(x, spec, y, yerrup, yerrdown):
 
     return res
 
-def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, f_star):
+def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
     '''
     Explore posterior distribution with (static) nested sampling.
     '''
@@ -566,23 +567,75 @@ def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, f_star):
     print('\nStarting nested sampling\n')
 
     # "Static" nested sampling.
-    ndim = np.shape(soln.params)[0]
-    pool = multiprocessing.Pool(7)
-    pool.size=7
-    sampler = dynesty.NestedSampler(lnprob, prior_transform, ndim, \
-                nlive=100, pool=pool, \
-                logl_args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
-                ptform_args=[pardict])
-    sampler.run_nested()
+    ndim = np.shape(soln.x)[0]
 
+    sampler = dynesty.NestedSampler(lnprob, prior_transform, ndim, \
+                nlive=200, ptform_args=[pardict], \
+                logl_args=(A, yerrup, yerrdown, wl, zz, pardict, fstar))
+    #sampler = DynamicNestedSampler(lnprob, prior_transform, ndim, \
+    #    bound='single', nlive=100, logl_args=(A, yerrup, yerrdown, wl, zz, \
+    #    pardict, f_star), ptform_args=[pardict])
+    sampler.run_nested(print_progress=False)
     sresults = sampler.results
+    samples = sresults['samples']
+
+    percentiles = [np.percentile(samples[:,i],[15.9, 50, 84.1]) \
+                        for i in np.arange(np.shape(samples)[1])]
+    Tspot_text = str(int(percentiles[0][1])) + r'$^{+' \
+                + str(int(np.diff(percentiles[0])[1])) + r'}_{-' \
+                + str(int(np.diff(percentiles[0])[0])) + r'}$'
+    beta_text = str(np.round(percentiles[1][1], 2)) + r'$^{+' \
+                + str(np.round(np.diff(percentiles[1])[1], 2)) + r'}_{-' \
+                + str(np.round(np.diff(percentiles[1])[0], 2)) + r'}$'
+    plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, \
+                [Tspot_text, beta_text])
 
     # Plot a summary of the run.
+    labels = [r'$T_\bullet$ [K]', r'$\beta$']
     rfig, raxes = dyplot.runplot(sresults)
+    plt.savefig(pardict['chains_folder'] + '/runplot_nested_spec.pdf')
     # Plot traces and 1-D marginalized posteriors.
-    tfig, taxes = dyplot.traceplot(rsesults)
+    tfig, taxes = dyplot.traceplot(sresults, labels=labels)
+    plt.savefig(pardict['chains_folder'] + '/traceplot_nested_spec.pdf')
     # Plot the 2-D marginalized posteriors.
-    cfig, caxes = dyplot.cornerplot(sresults)
+    label_kwargs = {}
+    label_kwargs['fontsize'] = 14
+    cfig, caxes = dyplot.cornerplot(sresults, color='blue', \
+            labels=labels, label_kwargs=label_kwargs)
+    plt.savefig(pardict['chains_folder'] + '/cornerplot_nested_spec.pdf')
+
+    #truths = [pardict['tumbra'], None]
+    #cornerplot.cornerplot(samples, labels, truths, \
+    #        pardict['chains_folder'] + '/cornerspec_nested.pdf', ranges=None)
+
+    # Save chains
+    fout = open(pardict['chains_folder'] + '/nested_spec.pickle', 'wb')
+    pickle.dump(sresults, fout)
+    fout.close()
+
+    return
+
+def plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, text):
+
+    plt.figure(42)
+    inds = np.random.randint(np.shape(samples)[0], size=100)
+    for ind in inds:
+        sample = samples[ind]
+        if np.isfinite(lnprior(sample, pardict)):
+            bsol = compute_deltaf_f(sample, wl, zz, pardict, fstar=fstar)
+            plt.plot(wl, bsol, 'c', alpha=0.1)
+    plt.errorbar(wl, A, yerr=[yerrup, yerrdown], \
+                                fmt='ko', mfc='None', capsize=2)
+    plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
+    plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
+    plt.text(3.5, np.mean(A),'{}'.format(pardict['tstar']) + ' K star\n' \
+      + pardict['instrument'].replace('/', '').replace('_', ' ') \
+      + '\n' + r'$\theta={}^\circ$'.format(int(pardict['theta'])) + '\n' \
+      + r'True $T_\bullet=$' + str(int(pardict['tumbra'])) \
+      + ' K\n' + 'Fit: \n' + r'$T_\bullet = $' + text[0] + '\n' \
+      + r'$\beta=$' + text[1], fontsize=12)
+    plt.tight_layout()
+    plt.savefig(pardict['chains_folder'] + '/samples_spec.pdf')
 
     return
 
@@ -595,8 +648,8 @@ def prior_transform(u, pardict):
         u[0] = 1400. * u[0] + 3600.
     elif pardict['tstar'] == 3500.:
         u[0] = 1200. * u[0] + 2300.
-    u[1] *= 10.
-    u[2] = u[2]*0.05 + 1e-6
+    u[1] = u[1]*9. + 1.
+    #u[2] = u[2]*0.05 + 1e-6
 
     return u
 
@@ -1136,10 +1189,6 @@ def lnprob(pars, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
     if not np.isfinite(lp):
         return -np.inf
     else:
-        #pars = lmfit.Parameters()
-        #pars.add('Tspot', value=par[0])
-        #pars.add('beta', value=par[1])
-        #pars.add('delta', value=par[1])
         chi2 = np.sum(spec_res(pars, spec, yerrup, yerrdown, wlobs, zz, \
                     pardict, fstar))
         lnL = -0.5*len(spec)*np.log(np.mean([yerrup, yerrdown])) \
@@ -1173,7 +1222,7 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
         cond = np.linalg.cond(p0)
 
     print("Running MCMC...")
-    sampler.run_mcmc(p0, 256, progress=False)
+    sampler.run_mcmc(p0, 512, progress=False)
 
     # Merge in a single chain
     samples = sampler.get_chain(discard=100, flat=True)
@@ -1201,25 +1250,8 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
 
 
     # Plot 100 models from the posteriors
-    plt.figure(42)
-    inds = np.random.randint(np.shape(samples)[0], size=10)
-    for ind in inds:
-        sample = samples[ind]
-        if np.isfinite(lnprior(sample, pardict)):
-            bsol = compute_deltaf_f(sample, wl, zz, pardict, fstar=fstar)
-            plt.plot(wl, bsol, 'c', alpha=0.1)
-    plt.errorbar(wl, A, yerr=[yerrup, yerrdown], \
-                                fmt='ko', mfc='None', capsize=2)
-    plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
-    plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
-    plt.text(3.5, max(A),'{}'.format(pardict['tstar']) + ' K star\n' \
-      + pardict['instrument'].replace('/', '').replace('_', ' ') \
-      + '\n' + r'$\theta={}^\circ$'.format(int(pardict['theta'])) + '\n' \
-      + r'True $T_\bullet=$' + str(int(pardict['tumbra'])) \
-      + ' K\n' + 'Fit: \n' + r'$T_\bullet = $' + Tspot_text + '\n' \
-      + r'$\beta=$' + beta_text, fontsize=12)
-    plt.tight_layout()
-    plt.savefig(pardict['chains_folder'] + '/samples_spec.pdf')
+    plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, \
+                [Tspot_text, beta_text])
 
     # Save chains
     fout = open(pardict['chains_folder'] + '/chains_spec.pickle', 'wb')
