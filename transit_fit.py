@@ -103,6 +103,8 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             if diz['tstar'] == 3500:
                 #if diz['instrument'] == 'NIRCam':
                 tspot_ = 0.115
+                if diz['lat'] == 21.:
+                    tspot_ = 0.105
                 #else:
                 #    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
             else:
@@ -223,9 +225,13 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     if ind == bestbin:
         ndim, nwalkers = len(initial), 128
         iters = 2000
+        if diz['lat'] == 21:
+            iters=4000
     else:
         ndim, nwalkers = len(initial), 64
         iters = 1000
+        if diz['lat'] == 21:
+            iters=2000
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
         args=([t, y, yerr, model, fix_dict]))
     # Variation around LM solution
@@ -574,7 +580,7 @@ def lnprior(p, model):
             kr, q1, q2, r0, r1, r2, A, n, sig, x0, inclin, ttr = p
             if not np.logical_and.reduce((sig >= 0., 0.06 < x0 < 0.15, \
                         0. <= q1 <= 1.,  0. <= q2 <= 1., \
-                        80. <= inclin <= 100., 1. <= n < 10.)):
+                        80. <= inclin <= 90., 1. <= n < 10.)):
                 return -np.inf
         elif len(p) == 7:
             kr, q1, q2, r0, r1, r2, A = p

@@ -559,59 +559,66 @@ def scalespec2(x, spec, y, yerrup, yerrdown):
 
     return res
 
-def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
+def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False):
     '''
     Explore posterior distribution with (static) nested sampling.
     '''
 
     print('\nStarting nested sampling\n')
 
-    # "Static" nested sampling.
     ndim = np.shape(soln.x)[0]
+    if not read_sol:
+        # "Static" nested sampling.
+        sampler = dynesty.NestedSampler(lnprob, prior_transform, ndim, \
+                    nlive=200, ptform_args=[pardict], \
+                    logl_args=(A, yerrup, yerrdown, wl, zz, pardict, fstar))
+        #sampler = DynamicNestedSampler(lnprob, prior_transform, ndim, \
+        #    bound='single', nlive=100, logl_args=(A, yerrup, yerrdown, wl, zz, \
+        #    pardict, fstar), ptform_args=[pardict])
+        sampler.run_nested(print_progress=True)
+        sresults = sampler.results
+    else:
+        sresults = pickle.load(open(pardict['chains_folder'] \
+                    + '/nested_spec.pickle', 'rb'))
 
-    sampler = dynesty.NestedSampler(lnprob, prior_transform, ndim, \
-                nlive=200, ptform_args=[pardict], \
-                logl_args=(A, yerrup, yerrdown, wl, zz, pardict, fstar))
-    #sampler = DynamicNestedSampler(lnprob, prior_transform, ndim, \
-    #    bound='single', nlive=100, logl_args=(A, yerrup, yerrdown, wl, zz, \
-    #    pardict, f_star), ptform_args=[pardict])
-    sampler.run_nested(print_progress=False)
-    sresults = sampler.results
     samples = sresults['samples']
+    weights = np.exp(sresults.logwt - sresults.logz[-1])
+    quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                weights=weights) for samps in samples.T]
 
-    percentiles = [np.percentile(samples[:,i],[15.9, 50, 84.1]) \
-                        for i in np.arange(np.shape(samples)[1])]
-    Tspot_text = str(int(percentiles[0][1])) + r'$^{+' \
-                + str(int(np.diff(percentiles[0])[1])) + r'}_{-' \
-                + str(int(np.diff(percentiles[0])[0])) + r'}$'
-    beta_text = str(np.round(percentiles[1][1], 2)) + r'$^{+' \
-                + str(np.round(np.diff(percentiles[1])[1], 2)) + r'}_{-' \
-                + str(np.round(np.diff(percentiles[1])[0], 2)) + r'}$'
-    plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, \
-                [Tspot_text, beta_text])
+    Tspot_text = str(int(quantiles[0][1])) + r'$^{+' \
+                + str(int(np.diff(quantiles[0])[1])) + r'}_{-' \
+                + str(int(np.diff(quantiles[0])[0])) + r'}$'
+    beta_text = str(np.round(quantiles[1][1], 2)) + r'$^{+' \
+                + str(np.round(np.diff(quantiles[1])[1], 2)) + r'}_{-' \
+                + str(np.round(np.diff(quantiles[1])[0], 2)) + r'}$'
+    samples_equal = dyfunc.resample_equal(samples, weights)
+    plot_samples(samples_equal, wl, A, yerrup, yerrdown, \
+                zz, pardict, fstar, [Tspot_text, beta_text])
 
-    # Plot a summary of the run.
-    labels = [r'$T_\bullet$ [K]', r'$\beta$']
-    rfig, raxes = dyplot.runplot(sresults)
-    plt.savefig(pardict['chains_folder'] + '/runplot_nested_spec.pdf')
-    # Plot traces and 1-D marginalized posteriors.
-    tfig, taxes = dyplot.traceplot(sresults, labels=labels)
-    plt.savefig(pardict['chains_folder'] + '/traceplot_nested_spec.pdf')
-    # Plot the 2-D marginalized posteriors.
-    label_kwargs = {}
-    label_kwargs['fontsize'] = 14
-    cfig, caxes = dyplot.cornerplot(sresults, color='blue', \
-            labels=labels, label_kwargs=label_kwargs)
-    plt.savefig(pardict['chains_folder'] + '/cornerplot_nested_spec.pdf')
+    if not read_sol:
+        # Plot a summary of the run.
+        labels = [r'$T_\bullet$ [K]', r'$\beta$']
+        rfig, raxes = dyplot.runplot(sresults)
+        plt.savefig(pardict['chains_folder'] + '/runplot_nested_spec.pdf')
+        # Plot traces and 1-D marginalized posteriors.
+        tfig, taxes = dyplot.traceplot(sresults, labels=labels)
+        plt.savefig(pardict['chains_folder'] + '/traceplot_nested_spec.pdf')
+        # Plot the 2-D marginalized posteriors.
+        label_kwargs = {}
+        label_kwargs['fontsize'] = 14
+        cfig, caxes = dyplot.cornerplot(sresults, color='blue', \
+                labels=labels, label_kwargs=label_kwargs)
+        plt.savefig(pardict['chains_folder'] + '/cornerplot_nested_spec.pdf')
 
-    #truths = [pardict['tumbra'], None]
-    #cornerplot.cornerplot(samples, labels, truths, \
-    #        pardict['chains_folder'] + '/cornerspec_nested.pdf', ranges=None)
+        #truths = [pardict['tumbra'], None]
+        #cornerplot.cornerplot(samples, labels, truths, \
+        #      pardict['chains_folder'] + '/cornerspec_nested.pdf', ranges=None)
 
-    # Save chains
-    fout = open(pardict['chains_folder'] + '/nested_spec.pickle', 'wb')
-    pickle.dump(sresults, fout)
-    fout.close()
+        # Save chains
+        fout = open(pardict['chains_folder'] + '/nested_spec.pickle', 'wb')
+        pickle.dump(sresults, fout)
+        fout.close()
 
     return
 
@@ -628,8 +635,8 @@ def plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, text):
                                 fmt='ko', mfc='None', capsize=2)
     plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
     plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
-    plt.text(3.5, np.mean(A),'{}'.format(pardict['tstar']) + ' K star\n' \
-      + pardict['instrument'].replace('/', '').replace('_', ' ') \
+    plt.text(3.5, np.mean(A) + 0.0002,'{}'.format(pardict['tstar']) \
+      + ' K star\n' + pardict['instrument'].replace('/', '').replace('_', ' ') \
       + '\n' + r'$\theta={}^\circ$'.format(int(pardict['theta'])) + '\n' \
       + r'True $T_\bullet=$' + str(int(pardict['tumbra'])) \
       + ' K\n' + 'Fit: \n' + r'$T_\bullet = $' + text[0] + '\n' \

@@ -299,7 +299,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #    fix_dict['lat'] = 28. # 1at umbra
         #elif pardict['tstar'] == 5000:
         #    fix_dict['lat'] = 12.
-        fix_dict['lat'] = 0.
+        fix_dict['lat'] = pardict['lat']
         fix_dict['latp'] = 12. # penumbra
         # Density derived from logg
         fix_dict['rho'] = 5.14e-5/pardict['rstar']*10**pardict['loggstar']  #g/cm3
@@ -309,7 +309,9 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         fix_dict['w'] = 180.
         fix_dict['omega'] = 0.
         fix_dict['nspots'] = 1
-
+        #set_trace()
+        #aR = (6.67408e-11*fix_dict['rho']*1e3*(fix_dict['P']*86400.)**2 \
+        #                /(3.*np.pi))**(1./3.)
         # Random distribution for spots parameters
         params = np.zeros(8 + 3) # second spot is penumbra
         params[0] = yobs[i]**0.5 # kr
@@ -408,18 +410,17 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
         yerr = np.zeros(len(transit)) + uncph
 
-        plt.close('all')
-        plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
-        #plt.plot(tt_, modspot(soln.x, tt_))
-        plt.xlabel('Time [d]', fontsize=16)
-        plt.ylabel('Relative flux', fontsize=16)
-        plt.title('Channel: ' + str(round(xobs[i], 3)) + ' $\mu$m', fontsize=16)
+        #plt.close('all')
+        #plt.errorbar(tt, transit, yerr=yerr, fmt='k.')#, capsize=2)
+        ##plt.plot(tt_, modspot(soln.x, tt_))
+        #plt.xlabel('Time [d]', fontsize=16)
+        #plt.ylabel('Relative flux', fontsize=16)
+        #plt.title('Channel: ' + str(round(xobs[i], 3)) + ' $\mu$m', fontsize=16)
         if i == len(xobs) - 1:
             i = -1
         #plt.show()
-        #set_trace()
-        plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
-                        + '_' + pardict['observatory'] + '.pdf')
+        #plt.savefig(pardict['data_folder'] + 'transit_spots' + str(i) \
+        #                + '_' + pardict['observatory'] + '.pdf')
         savefile = open(pardict['data_folder'] + 'transit_spots' \
                         + '_' + str(i) + '.pic', 'wb')
         pickle.dump([tt, transit, yerr, xobs[i]], savefile)
