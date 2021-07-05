@@ -25,8 +25,8 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     #pardict['instrument'] = str(instr) + '/'
     if not os.path.exists(pardict['project_folder'] + pardict['instrument'] + '/'):
         os.mkdir(pardict['project_folder'] + pardict['instrument'] + '/')
-    if int(pardict['lat']) == 21:
-        latpart = '_lat' + str(int(pardict['lat']))
+    if int(pardict['latspot']) == 21:
+        latpart = '_lat' + str(int(pardict['latspot']))
     else:
         latpart = ''
     pardict['case_folder'] = pardict['project_folder'] \
@@ -87,14 +87,20 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             totchan = simulate_transit.add_spots(pardict, resol=res, \
                     models=models)
         elif pardict['instrument'] == 'NIRCam':
+            if pardict['tstar'] == 3500:
+                rsttemp = 0.3
+                rpltemp = 0.3
+            elif pardict['tstar'] == 5000:
+                rsttemp = 1.0
+                rpltemp = 1.0
             uncfile1 = pardict['project_folder'] + pardict['instrument'] \
                 + '/dhs_snr_calcs/spec_p' \
-                + str(pardict['rplanet']) + '_star' + str(pardict['rstar']) \
+                + str(rpltemp) + '_star' + str(rsttemp) \
                 + '_' + 'k' + str(magstar).replace('.', 'p') + '.dat'
             w1, y1, yerr1 = np.loadtxt(uncfile1, unpack=True)
             uncfile2 = pardict['project_folder'] + pardict['instrument'] \
                 + '/grism_snr_calcs/spec_p' \
-                + str(pardict['rplanet']) + '_star' + str(pardict['rstar']) \
+                + str(rpltemp) + '_star' + str(rsttemp) \
                 + '_' + 'k' + str(magstar).replace('.', 'p') + '.dat'
             w2, y2, yerr2 = np.loadtxt(uncfile2, unpack=True)
             wmod = np.concatenate((w1, w2))
@@ -123,7 +129,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     return pardict
 
 def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
-            simulate_transits=False, fit_transits=True, fit_spectra=True, \
+            simulate_transits=True, fit_transits=True, fit_spectra=True, \
             models='josh', res=10, fittype='grid', \
             spotted_starmodel=False, inputpars={}, update=False, \
             chi2rplot=False, model='KSint'):
@@ -149,14 +155,13 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['incl'] = inputpars['incl']
     ip['theta'] = inputpars['theta']
     ip['instrument'] = instrum
-    ip['lat'] = inputpars['latspot']
+    ip['latspot'] = inputpars['latspot']
 
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        #mags = np.array([14.5])
+        #mags = np.array([10.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -182,7 +187,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 + '_theta' + str(int(ip['theta'])) + '.pdf'
         if os.path.isfile(checkf):
             return
-    '''
+
     dict_starmodel, dict_spotmodels \
                         = ingest_stellarspectra(tstar, tcontrast, loggstar)
 
@@ -193,16 +198,16 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     if models == 'josh':
         muval = np.cos(np.radians(ip['theta']))
         ip['muindex'] = abs(ip['starmodel']['mus'] - muval).argmin()
-    '''
+
     ## Try only one Tspot
     if tstar == 3500:
     # Very cool models will only be used for the fit
         tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-600.])
+        #tcontrast = np.array([-300.])
     elif tstar == 5000.:
         tcontrast = np.arange(-1200, 0, 100)
         #tcontrast = np.array([-900.])
-    '''
+
     if len(opers) > 0:
         for mag in mags:
             for td in tcontrast[::3]:
@@ -210,7 +215,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 pardict = go(mag, ip, opers, models, res=res, \
                             fittype=fittype, \
                             spotted_starmodel=spotted_starmodel, model=model)
-    '''
+
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res3(ip, mags, tcontrast, models)
@@ -851,9 +856,6 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
     return
 
 def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
-    '''
-    Represent the results of the LM fits.
-    '''
 
     plt.close('all')
     tcontrast = tcontrast[::3]
@@ -905,11 +907,10 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
 
             if instrument == 'NIRSpec_Prism/':
                 errup = np.sqrt(yerrup**2)# + 79.**2)
-                errdown = np.sqrt(yerrup**2)# + 79.**2)
+                errdown = np.sqrt(yerrdown**2)# + 79.**2)
             elif instrument == 'NIRCam/':
                 errup = np.sqrt(yerrup**2)# + 62.**2)
                 errdown = np.sqrt(yerrdown**2)# + 62.**2)
-
             if j == 0:
                 plt.scatter(-(ip['tstar'] - tumbra), \
                     -(ip['tstar'] - toutput), marker=marker[i], s=100, \
@@ -919,11 +920,11 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
                     -(ip['tstar'] - toutput), marker=marker[i], s=100, \
                     c=colour[i])
             plt.errorbar(-(ip['tstar'] - tumbra), \
-                    -(ip['tstar'] - toutput), yerr=([errup], [errdown]), \
+                    -(ip['tstar'] - toutput), yerr=([errdown], [errup]), \
                     fmt='-', color=colour[i], capsize=2)
 
-    plt.xlabel(r'True $T_\bullet - T_\star$ [K]', fontsize=14)
-    plt.ylabel(r'Recovered $T_\bullet - T_\star$ [K]', fontsize=14)
+    plt.xlabel(r'True $T_\bullet - T_\star$ [K]', fontsize=16)
+    plt.ylabel(r'Recovered $T_\bullet - T_\star$ [K]', fontsize=16)
     plt.legend(title='K mag', title_fontsize=14, frameon=False)
     plt.title('{}'.format(ip['tstar']) + ' K star, ' + instrument.replace('/', \
                 '').replace('_', ' ') \
@@ -992,7 +993,7 @@ def plot_res5(ip, mags, tcontrast, models, fittype='LM'):
 
                 if instrument == 'NIRSpec_Prism/':
                     errup = np.sqrt(yerrup**2)# + 79.**2)
-                    errdown = np.sqrt(yerrup**2)# + 79.**2)
+                    errdown = np.sqrt(yerrdown**2)# + 79.**2)
                 elif instrument == 'NIRCam/':
                     errup = np.sqrt(yerrup**2)# + 62.**2)
                     errdown = np.sqrt(yerrdown**2)# + 62.**2)
@@ -1006,13 +1007,13 @@ def plot_res5(ip, mags, tcontrast, models, fittype='LM'):
                         -(ip['tstar'] - toutput), marker=marker[k], s=100, \
                         c=colour[k])
                 plt.errorbar(size, \
-                        -(ip['tstar'] - toutput), yerr=([errup], [errdown]), \
+                        -(ip['tstar'] - toutput), yerr=([errdown], [errup]), \
                         fmt='-', color=colour[k], capsize=2)
 
     plt.plot(aumbras, np.zeros(len(aumbras)) + tcontrast[0], 'k--')
-    plt.text(2.0, tcontrast[0] + 50., 'True value', fontsize=14)
-    plt.xlabel('Starspot size [deg]', fontsize=14)
-    plt.ylabel(r'$T_\bullet - T_\star$ [K]', fontsize=14)
+    plt.text(2.0, tcontrast[0] + 50., 'True value', fontsize=16)
+    plt.xlabel('Starspot size [deg]', fontsize=16)
+    plt.ylabel(r'$T_\bullet - T_\star$ [K]', fontsize=16)
     plt.legend(title='K mag', title_fontsize=14, frameon=False)
     plt.title('{}'.format(ip['tstar']) + ' K star, ' + instrument.replace('/', \
                 '').replace('_', ' ') \
@@ -1020,8 +1021,8 @@ def plot_res5(ip, mags, tcontrast, models, fittype='LM'):
     plt.tight_layout()
     plt.savefig(project_folder + instrument + 'star_' \
         + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-        + '_' + str(int(ip['tstar'])) + '_avary_' \
-        + '_theta' + str(int(ip['theta'])) + '_Tscatter.pdf')
+        + '_' + str(int(ip['tstar'])) + '_avary_theta' + str(int(ip['theta'])) \
+        + '_Tscatter.pdf')
     plt.close('all')
 
     return
@@ -1076,7 +1077,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM'):
 
                 if instrument == 'NIRSpec_Prism/':
                     errup = np.sqrt(yerrup**2)# + 79.**2)
-                    errdown = np.sqrt(yerrup**2)# + 79.**2)
+                    errdown = np.sqrt(yerrdown**2)# + 79.**2)
                 elif instrument == 'NIRCam/':
                     errup = np.sqrt(yerrup**2)# + 62.**2)
                     errdown = np.sqrt(yerrdown**2)# + 62.**2)
@@ -1090,7 +1091,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM'):
                         -(ip['tstar'] - toutput), marker=marker[k], s=100, \
                         c=colour[k])
                 plt.errorbar(-(ip['tstar'] - tumbra), \
-                        -(ip['tstar'] - toutput), yerr=([errup], [errdown]), \
+                        -(ip['tstar'] - toutput), yerr=([errdown], [errup]), \
                         fmt='-', color=colour[k], capsize=2)
 
     if ip['tstar'] == 5000:
@@ -1098,7 +1099,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM'):
     elif ip['tstar'] == 3500.:
         xx = -(ip['tstar'] - np.linspace(2300., 3500., 100))
     plt.plot(xx, xx, 'k--')
-    plt.xlabel(r'True $T_\bullet - T_\star$ [K]', fontsize=14)
+    plt.xlabel(r'True $T_\bullet - T_\star$ [K]', fontsize=16)
     plt.legend(title='K mag', title_fontsize=14, frameon=False)
     plt.ylabel(r'Recovered $T_\bullet - T_\star$ [K]', fontsize=14)
     plt.title('{}'.format(ip['tstar']) + ' K star, ' + instrument.replace('/', \
@@ -1120,25 +1121,32 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM'):
 
 def main2(spotsize, latspot=0.):
 
-    for m, instrum in enumerate(['NIRCam']): # NIRSpec_Prism
-        for j, incl in enumerate([90.]): #88.7
-            for k, theta in enumerate([latspot]): # or mu angle 0.., 40
+    if latspot == 0.:
+        incl = 90.
+    elif latspot == 21.:
+        incl = 88.7
+    else:
+        print('Undefined scenario')
+        return
+    for m, instrum in enumerate(['NIRCam', 'NIRSpec_Prism']):
+        for j, incl in enumerate([incl]):
+            for k, theta in enumerate([40.]): # or mu angle 0.., 40
                 inputpars = {}
                 #inputpars['aumbra'] = asize
                 inputpars['incl'] = incl
                 inputpars['theta'] = theta
                 inputpars['aumbra'] = spotsize
                 inputpars['latspot'] = latspot
-                cycle(0.3, 0.3, 3500, 5.0, instrum, \
-                    simulate_transits=False, fit_transits=False, \
-                    fit_spectra=True, spotted_starmodel=False, \
-                    inputpars=inputpars, update=False, chi2rplot=True, \
-                    model='batman')
-                #cycle(1.0, 1.0, 5000, 4.5, instrum, \
-                #    simulate_transits=False, fit_transits=False, \
+                #cycle(0.25, 0.47, 3500, 5.0, instrum, \
+                #    simulate_transits=False, fit_transits=True, \
                 #    fit_spectra=True, spotted_starmodel=False, \
                 #    inputpars=inputpars, update=False, chi2rplot=True, \
                 #    model='batman')
+                cycle(0.75, 0.75, 5000, 4.5, instrum, \
+                    simulate_transits=True, fit_transits=True, \
+                    fit_spectra=True, spotted_starmodel=False, \
+                    inputpars=inputpars, update=False, chi2rplot=True, \
+                    model='batman')
 
     return
 
@@ -1149,20 +1157,24 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
             + outfile, 'wt')
     tstar = int(tstar)
     theta = int(theta)
+    latspot = int(latspot)
     inputpars = {}
-    inputpars['incl'] = 88.7 #90.
+    if latspot == 0:
+        inputpars['incl'] = 90.
+    elif latspot == 21:
+        inputpars['incl'] = 88.7
     inputpars['theta'] = theta
     inputpars['aumbra'] = float(spotsize)
-    inputpars['latspot'] = latspot
+    inputpars['latspot'] = int(latspot)
     if tstar == 5000:
-        rstar = 1.0
-        rplanet = 1.0
+        rstar = 0.75
+        rplanet = 0.75
         loggstar = 4.5
     elif tstar == 3500:
-        rstar = 0.3
-        rplanet = 0.3
+        rstar = 0.47
+        rplanet = 0.25
         loggstar = 5.0
-    cycle(rstar, rplanet, tstar, loggstar, instrument, \
+    cycle(rplanet, rstar, tstar, loggstar, instrument, \
             simulate_transits=True, fit_transits=True, \
             fit_spectra=True, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman')

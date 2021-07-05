@@ -47,7 +47,11 @@ def transit_spectro(pardict, resol=10, model='KSint'):
 
     return
 
-def transit_emcee(diz, ind, bestbin, model='KSint'):
+def transit_emcee(diz, ind, bestbin, model='KSint', resume=False):
+
+    if resume and os.path.exists(diz['chains_folder'] \
+                    + '/chains_' + str(model) + '_' + str(ind) + '.pic'):
+        return
 
     print('Channel', str(ind))
 
@@ -66,24 +70,30 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     rhostar = 5.14e-5/diz['rstar']*10**diz['loggstar'] #cgs
     global aR
     aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
+    print('aR = ', aR)
     global modeltype
     if model == 'batman' or model == 'pytransit':
         # LM fit boundaries - fit for t0 and x0 only on the first channel
         bounds_model = []
         bounds_model.append((0.01, 0.2))         # rp/r*
-        if diz['tstar'] == 3500:
-            bounds_model.append((0.01, 0.2))          # q1 from Kipping+2013
-            bounds_model.append((0.15, 0.3))          # q2
-        elif diz['tstar'] == 5000:
-            bounds_model.append((0.15, 0.3))          # q1 from Kipping+2013
-            bounds_model.append((0.15, 0.3))
+        bounds_model.append((0., 0.5))          # q1 from Kipping+2013
+        bounds_model.append((0., 0.5))
+        #if diz['tstar'] == 3500:
+        #    bounds_model.append((0.01, 0.2))          # q1 from Kipping+2013
+        #    bounds_model.append((0.15, 0.3))          # q2
+        #elif diz['tstar'] == 5000:
+        #    bounds_model.append((0.15, 0.3))          # q1 from Kipping+2013
+        #    bounds_model.append((0.15, 0.3))
         bounds_model.append((-1., 1.))           # r0
         bounds_model.append((-1., 1.))           # r1
         bounds_model.append((0., 10.))           # r2
-        bounds_model.append((1e-3, 1))           # A
-        bounds_model.append((1., 10.))           # n # Flat gaussian
-        bounds_model.append((np.diff(t).min()*3, 0.1))         # sigma
-        bounds_model.append((0.06, 0.15))        # x0 = 0.1051
+        bounds_model.append((1e-4, 1))           # A
+        bounds_model.append((2., 10.))           # n # Flat gaussian
+        bounds_model.append((np.diff(t).min(), 0.1))         # sigma
+        if int(diz['theta']) == 0:
+            bounds_model.append((0.09, 0.11))        # x0 = 0.1051
+        elif int(diz['theta']) == 40:
+            bounds_model.append((0.105, 0.15))
         bounds_model.append((80., 90.))          # orbit inclination
         bounds_model.append((0.08, 0.12))        # t0
         #bounds = [[], []]
@@ -103,7 +113,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
             if diz['tstar'] == 3500:
                 #if diz['instrument'] == 'NIRCam':
                 tspot_ = 0.115
-                if diz['lat'] == 21.:
+                if diz['latspot'] == 21.:
                     tspot_ = 0.105
                 #else:
                 #    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
@@ -111,7 +121,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
                 tspot_ = 0.135
         A, wspot_ = 2e-3, 0.01
         incl_, t0_ = 89., 0.1
-        n = 2.
+        n = 2.05
 
         # This will set the fit or fix for tspot and spot size
         # Spot position and size are fitted only on the bluemost wavelength bin
@@ -225,12 +235,12 @@ def transit_emcee(diz, ind, bestbin, model='KSint'):
     if ind == bestbin:
         ndim, nwalkers = len(initial), 128
         iters = 2000
-        if diz['lat'] == 21:
+        if diz['latspot'] == 21:
             iters=4000
     else:
         ndim, nwalkers = len(initial), 64
         iters = 1000
-        if diz['lat'] == 21:
+        if diz['latspot'] == 21:
             iters=2000
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
         args=([t, y, yerr, model, fix_dict]))
@@ -578,9 +588,9 @@ def lnprior(p, model):
     if model != 'KSint':
         if len(p) == 12:
             kr, q1, q2, r0, r1, r2, A, n, sig, x0, inclin, ttr = p
-            if not np.logical_and.reduce((sig >= 0., 0.06 < x0 < 0.15, \
+            if not np.logical_and.reduce((sig >= 1e-3, 0.06 < x0 < 0.15, \
                         0. <= q1 <= 1.,  0. <= q2 <= 1., \
-                        80. <= inclin <= 90., 1. <= n < 10.)):
+                        80. <= inclin <= 90., 2. <= n < 10.)):
                 return -np.inf
         elif len(p) == 7:
             kr, q1, q2, r0, r1, r2, A = p

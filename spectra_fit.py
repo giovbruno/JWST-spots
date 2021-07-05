@@ -25,9 +25,9 @@ import multiprocessing
 import lmfit
 
 homef = os.path.expanduser('~')
-modelsfolder = homef + '/Shelf/stellar_models/phxinten/HiRes/'
-foldthrough = homef + '/Shelf/filters/'
-intensfolder = homef + '/Shelf/stellar_models/phxinten/SpecInt/'
+modelsfolder = homef + '/Downloads/Shelf/stellar_models/phxinten/HiRes/'
+foldthrough = homef + '/Downloads/Shelf/filters/'
+intensfolder = homef + '/Downloads/Shelf/stellar_models/phxinten/SpecInt/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
@@ -294,13 +294,13 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 #    params.add('tspot', value=4100., min=3601., max=4999.)
                 #elif pardict['tstar'] == 3500:
                 #    params.add('tspot', value=3100., min=2301., max=3499.)
-                #params.add('beta', value=5., min=1., max=10.)
+                #params.add('delta', value=5., min=1., max=10.)
                 if pardict['tstar'] == 5000:
-                    boundsm = ([3601., 1.], [4999., 10.])
-                    p0 = [4100., 5.]
+                    boundsm = ([3601., 0.], [4999., 1.])
+                    p0 = [4100., 0.5]
                 elif pardict['tstar'] == 3500:
-                    boundsm = ([2301., 1.], [3499., 10.])
-                    p0 = [3000., 5.]
+                    boundsm = ([2301., 0.], [3499., 1.])
+                    p0 = [3000., 0.5]
                 #if pardict['muindex'] == len(pardict['starmodel']['mus']) - 1:
                 #    boundsm[0][1] = (1. - np.cos(np.mean(kr - 3*unckr))) / (1. \
                 #     - (pardict['starmodel']['mus'][pardict['muindex'] - 1] + #np.diff(pardict['starmodel']['mus'])[0]/2.))
@@ -311,11 +311,11 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 #    boundsm[0][1] = 0.5*np.diff(pardict['starmodel']['mus'])[0]
 
                 # This is once for the fit
-                #pardict['beta'] = boundsm[0][1]
+                #pardict['delta'] = boundsm[0][1]
                 ispecstar = np.transpose(pardict['starmodel']['spec'])
                 mmu = pardict['starmodel']['mus']
                 f_star = 2.*np.pi*np.trapz(ispecstar*mmu, x=mmu)
-                #params.add('beta', value=.5, min=0., max=10.)
+                #params.add('delta', value=.5, min=0., max=10.)
                 #params.add('delta', value=minspotsize, min=minspotsize, max=1.0)
                 #params['delta'].vary = False
                 soln = least_squares(spec_res, p0, bounds=boundsm, \
@@ -326,9 +326,11 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 #lmfit.printfuncs.report_fit(soln)
                 print('Least squares minimisation results:')
                 print(soln)
-                bsol = compute_deltaf_f(soln.x, wl, zz, pardict, \
-                                fstar=f_star)
-                plt.plot(wl, bsol, label='Best fit')
+                #bsol = compute_deltaf_f(soln.x, wl, zz, pardict, \
+                #                fstar=f_star)
+                #plt.plot(wl, bsol, label='Best fit')
+                #plt.show()
+                #set_trace()
                 if mcmc:
                     res = run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, \
                                 f_star)
@@ -559,10 +561,19 @@ def scalespec2(x, spec, y, yerrup, yerrdown):
 
     return res
 
-def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False):
+def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
+            resume=False):
     '''
     Explore posterior distribution with (static) nested sampling.
+
+    Parameters
+    ----------
+    resume: check if result files are present, in which case skip calculation
     '''
+
+    if resume and os.path.exists(pardict['chains_folder'] \
+                                                    + '/nested_spec.pickle'):
+            return
 
     print('\nStarting nested sampling\n')
 
@@ -575,7 +586,7 @@ def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False):
         #sampler = DynamicNestedSampler(lnprob, prior_transform, ndim, \
         #    bound='single', nlive=100, logl_args=(A, yerrup, yerrdown, wl, zz, \
         #    pardict, fstar), ptform_args=[pardict])
-        sampler.run_nested(print_progress=True)
+        sampler.run_nested(print_progress=False)
         sresults = sampler.results
     else:
         sresults = pickle.load(open(pardict['chains_folder'] \
@@ -592,33 +603,33 @@ def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False):
     beta_text = str(np.round(quantiles[1][1], 2)) + r'$^{+' \
                 + str(np.round(np.diff(quantiles[1])[1], 2)) + r'}_{-' \
                 + str(np.round(np.diff(quantiles[1])[0], 2)) + r'}$'
+    #gamma_text = str(np.round(quantiles[2][1], 2)) + r'$^{+' \
+    #            + str(np.round(np.diff(quantiles[2])[1], 2)) + r'}_{-' \
+    #            + str(np.round(np.diff(quantiles[2])[0], 2)) + r'}$'
     samples_equal = dyfunc.resample_equal(samples, weights)
     plot_samples(samples_equal, wl, A, yerrup, yerrdown, \
                 zz, pardict, fstar, [Tspot_text, beta_text])
 
-    if not read_sol:
-        # Plot a summary of the run.
-        labels = [r'$T_\bullet$ [K]', r'$\beta$']
-        rfig, raxes = dyplot.runplot(sresults)
-        plt.savefig(pardict['chains_folder'] + '/runplot_nested_spec.pdf')
-        # Plot traces and 1-D marginalized posteriors.
-        tfig, taxes = dyplot.traceplot(sresults, labels=labels)
-        plt.savefig(pardict['chains_folder'] + '/traceplot_nested_spec.pdf')
-        # Plot the 2-D marginalized posteriors.
-        label_kwargs = {}
-        label_kwargs['fontsize'] = 14
-        cfig, caxes = dyplot.cornerplot(sresults, color='blue', \
-                labels=labels, label_kwargs=label_kwargs)
-        plt.savefig(pardict['chains_folder'] + '/cornerplot_nested_spec.pdf')
+    # Plot a summary of the run.
+    labels = [r'$T_\bullet$ [K]', r'$\beta$']#, r'$\gamma$']
+    rfig, raxes = dyplot.runplot(sresults)
+    plt.savefig(pardict['chains_folder'] + '/runplot_nested_spec.pdf')
+    # Plot traces and 1-D marginalized posteriors.
+    tfig, taxes = dyplot.traceplot(sresults, labels=labels)
+    plt.savefig(pardict['chains_folder'] + '/traceplot_nested_spec.pdf')
+    # Plot the 2-D marginalized posteriors.
+    label_kwargs = {}
+    label_kwargs['fontsize'] = 14
+    cfig, caxes = dyplot.cornerplot(sresults, color='b', show_titles=False, \
+            #title_quantiles=[0.159, 0.50, 0.841], \
+            labels=labels, label_kwargs=label_kwargs, \
+            quantiles=[0.159, 0.50, 0.841], truths=[pardict['tumbra'], None])
+    plt.savefig(pardict['chains_folder'] + '/cornerplot_nested_spec.pdf')
 
-        #truths = [pardict['tumbra'], None]
-        #cornerplot.cornerplot(samples, labels, truths, \
-        #      pardict['chains_folder'] + '/cornerspec_nested.pdf', ranges=None)
-
-        # Save chains
-        fout = open(pardict['chains_folder'] + '/nested_spec.pickle', 'wb')
-        pickle.dump(sresults, fout)
-        fout.close()
+    # Save chains
+    fout = open(pardict['chains_folder'] + '/nested_spec.pickle', 'wb')
+    pickle.dump(sresults, fout)
+    fout.close()
 
     return
 
@@ -635,7 +646,7 @@ def plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, text):
                                 fmt='ko', mfc='None', capsize=2)
     plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
     plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
-    plt.text(3.5, np.mean(A) + 0.0002,'{}'.format(pardict['tstar']) \
+    plt.text(3.5, np.mean(A) + 0.00025,'{}'.format(pardict['tstar']) \
       + ' K star\n' + pardict['instrument'].replace('/', '').replace('_', ' ') \
       + '\n' + r'$\theta={}^\circ$'.format(int(pardict['theta'])) + '\n' \
       + r'True $T_\bullet=$' + str(int(pardict['tumbra'])) \
@@ -643,6 +654,7 @@ def plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, text):
       + r'$\beta=$' + text[1], fontsize=12)
     plt.tight_layout()
     plt.savefig(pardict['chains_folder'] + '/samples_spec.pdf')
+    plt.close('all')
 
     return
 
@@ -650,13 +662,16 @@ def prior_transform(u, pardict):
     '''
     Transforms the uniform random variable `u ~ Unif[0., 1.)`
     to the parameters of interest.
+
+    Modified on 2nd Jul 2021
     '''
     if pardict['tstar'] == 5000.:
         u[0] = 1400. * u[0] + 3600.
     elif pardict['tstar'] == 3500.:
         u[0] = 1200. * u[0] + 2300.
-    u[1] = u[1]*9. + 1.
-    #u[2] = u[2]*0.05 + 1e-6
+    #u[1] = u[1]*9. + 1.
+    u[1] = u[1]
+    #u[2] = u[2]
 
     return u
 
@@ -1086,6 +1101,61 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     '''
 
     tspot, beta = par
+
+    # Both intensity and flux are needed
+    muspot = pardict['starmodel']['mus'][pardict['muindex']]
+    i_star = pardict['starmodel']['spec'][pardict['muindex']]
+    wave = pardict['starmodel']['wl']
+
+    ispecstar = np.transpose(pardict['starmodel']['spec'])
+    mmu = pardict['starmodel']['mus']
+
+    # Flux from star + spot
+    i_spot = np.hstack(zz(wave, tspot))
+    istar_muspot = pardict['starmodel']['spec'][pardict['muindex']]
+
+    fstar_spot = fstar# - 2.*np.pi*pardict['minspotsize']\
+                #*(istar_muspot*muspot*np.diff(mmu)[0] -
+                # - i_spot*muspot*np.diff(mmu)[0])
+
+    if pardict['instrument'] == 'NIRSpec_Prism':
+        wth, fth = np.loadtxt(thrfile4, unpack=True)
+        wth*= 1e4
+    elif pardict['instrument'] == 'NIRCam':
+        wth1, fth1 = np.loadtxt(thrfile1, unpack=True)
+        wth2, fth2 = np.loadtxt(thrfile2, unpack=True)
+        wth3, fth3 = np.loadtxt(thrfile3, unpack=True)
+        wth = np.concatenate((wth1, wth2, wth3))
+        fth = np.concatenate((fth1, fth2, fth3))
+
+    idiff = integ_filter(wth, fth, wave, i_star - i_spot)
+    fstar_spot = integ_filter(wth, fth, wave, fstar_spot)
+    # Only keep values within filters curves
+    wlfl = np.logical_and(wth >= min(wave), wth <= max(wave))
+
+    wth = wth[wlfl]
+    idiff = idiff[wlfl]
+    fstar_spot = fstar_spot[wlfl]
+
+    deltaf_f = degrade_spec(idiff/fstar_spot, wth, wlobs)
+
+    f2f1 = np.pi*kr[:-1]**2*deltaf_f*beta
+
+    if plots:
+        print(tspot, ffact)
+        plt.close('all')
+        plt.plot(wlobs, deltaf_f*beta)
+        plt.show()
+        set_trace()
+
+    return f2f1
+
+def compute_betaf_f2(par, wlobs, zz, pardict, fstar=0., plots=False):
+    '''
+    Compute normalized flux variation during starspot occultation.
+    '''
+
+    tspot, beta = par
     #beta = par['beta']
     #tspot = par['tspot']
     #ffact = 7.99880071e-01
@@ -1101,8 +1171,8 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     i_spot = np.hstack(zz(wave, tspot))
     istar_muspot = pardict['starmodel']['spec'][pardict['muindex']]
     #fstar_spot = fstar - (2.*np.pi*istar_muspot*muspot*np.diff(mmu)[0])* \
-    #            (1. - par['delta']) \
-    #            + (2.*np.pi*i_spot*muspot*np.diff(mmu)[0])*par['delta']
+    #            (1. - par['beta']) \
+    #            + (2.*np.pi*i_spot*muspot*np.diff(mmu)[0])*par['beta']
     fstar_spot = fstar# - 2.*np.pi*pardict['minspotsize']\
                 #*(istar_muspot*muspot*np.diff(mmu)[0] -
                 # - i_spot*muspot*np.diff(mmu)[0])
@@ -1144,7 +1214,7 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
         plt.show()
         set_trace()
 
-    #return deltaf_f*mult[:len(deltaf_f)]
+    #return deltaf_f*mult[:len(betaf_f)]
     return deltaf_f*beta[:len(deltaf_f)]#*polyhere[:-1]
 
 def spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
@@ -1167,16 +1237,14 @@ def lnprior(par, pardict):
     tspot, beta = par
     if pardict['tstar'] == 3500:
         if np.logical_or.reduce((tspot <= 2300., tspot >= 3500., \
-                #ffact <= minspotsize, ffact >= 1.0, \
-                beta <= 1., beta >= 10.)):
+                beta <= 0., beta > 1.)):
                 return -np.inf
         else:
             return 0.
 
     elif pardict['tstar'] == 5000:
         if np.logical_or.reduce((tspot <= 3600., tspot >= 5000., \
-                #ffact <= minspotsize, ffact >= 1.0, \
-                beta <= 1., beta >= 10.)):
+                beta <= 0., beta > 1.)):
                 return -np.inf
         else:
             return 0.

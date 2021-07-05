@@ -2,7 +2,7 @@
 # spot occultations.
 
 import sys
-sys.path.append('/home/giovanni/Shelf/python/pandexo/')
+sys.path.append('/home/giovanni/Downloads/Shelf/python/pandexo/')
 import warnings
 warnings.filterwarnings('ignore')
 import pandexo.engine.justdoit as jdi # THIS IS THE HOLY GRAIL OF PANDEXO
@@ -24,8 +24,8 @@ import ld_coeffs
 from astropy.convolution import convolve
 from pdb import set_trace
 
-modelsfolder = homedir + '/Shelf/stellar_models/phxinten/HiRes/'
-foldthrough = homedir + '/Shelf/filters/'
+modelsfolder = homedir + '/Downloads/Shelf/stellar_models/phxinten/HiRes/'
+foldthrough = homedir + '/Downloads/Shelf/filters/'
 thrfile1 = foldthrough + 'JWST_NIRCam.F150W2.dat'
 thrfile2 = foldthrough + 'JWST_NIRCam.F322W2.dat'
 thrfile3 = foldthrough + 'JWST_NIRCam.F444W.dat'
@@ -213,6 +213,10 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         # First and last one must have some rebinning problem
         xobs, yobs, yobs_err = simultr[0], simultr[1], simultr[2]
 
+    # Rescale kr with new planet/star radius ratio
+    if pardict['instrument'] == 'NIRCam' and int(pardict['tstar']) == 3500:
+        yobs = yobs - np.mean(yobs) \
+                        + (pardict['rplanet']*0.1005/pardict['rstar'])**2
     if pardict['spotted_starmodel'] and pardict['instrument'] == 'NIRCam':
         yobs = spotted_transmsp(xobs, yobs, pardictmodels=models)
 
@@ -299,7 +303,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
         #    fix_dict['lat'] = 28. # 1at umbra
         #elif pardict['tstar'] == 5000:
         #    fix_dict['lat'] = 12.
-        fix_dict['lat'] = pardict['lat']
+        fix_dict['lat'] = pardict['latspot']
         fix_dict['latp'] = 12. # penumbra
         # Density derived from logg
         fix_dict['rho'] = 5.14e-5/pardict['rstar']*10**pardict['loggstar']  #g/cm3
