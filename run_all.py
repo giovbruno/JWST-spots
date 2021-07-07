@@ -15,7 +15,7 @@ import sys
 from pdb import set_trace
 
 def go(magstar, pardict, operation, models, res=10, fittype='grid', \
-        spotted_starmodel=True, model='KSint'):
+        spotted_starmodel=True, model='KSint', noscatter=False):
 
     # Folders & files (add to the input dictionary)
     #pardict = {}
@@ -29,6 +29,11 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
         latpart = '_lat' + str(int(pardict['latspot']))
     else:
         latpart = ''
+    if noscatter:
+        scatterpart = '_noscatter'
+    else:
+        scatterpart = ''
+
     pardict['case_folder'] = pardict['project_folder'] \
             + pardict['instrument'] + '/star_' + str(int(pardict['tstar'])) \
             + 'K/p' + str(np.round(pardict['rplanet'], 4)) \
@@ -38,7 +43,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) + latpart \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + '/'
+            + '_mag' + str(magstar) + scatterpart + '/'
     if not os.path.exists(pardict['case_folder']):
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
@@ -85,7 +90,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             #if pardict['spotted_starmodel']:
             simulate_transit.generate_spectrum_jwst(pardict, models)
             totchan = simulate_transit.add_spots(pardict, resol=res, \
-                    models=models)
+                    models=models, noscatter=noscatter)
         elif pardict['instrument'] == 'NIRCam':
             if pardict['tstar'] == 3500:
                 rsttemp = 0.3
@@ -132,7 +137,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=True, fit_transits=True, fit_spectra=True, \
             models='josh', res=10, fittype='grid', \
             spotted_starmodel=False, inputpars={}, update=False, \
-            chi2rplot=False, model='KSint'):
+            chi2rplot=False, model='KSint', noscatter=False):
     '''
     Run simulations for several scenarios.
 
@@ -159,6 +164,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
+        #mags = [7.5]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
         #mags = np.array([10.5])
@@ -203,7 +209,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     if tstar == 3500:
     # Very cool models will only be used for the fit
         tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-300.])
+        #tcontrast = np.array([-600.])
     elif tstar == 5000.:
         tcontrast = np.arange(-1200, 0, 100)
         #tcontrast = np.array([-900.])
@@ -214,13 +220,14 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 ip['tumbra'] = tstar + td
                 pardict = go(mag, ip, opers, models, res=res, \
                             fittype=fittype, \
-                            spotted_starmodel=spotted_starmodel, model=model)
+                            spotted_starmodel=spotted_starmodel, model=model, \
+                            noscatter=noscatter)
 
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res3(ip, mags, tcontrast, models)
-    plot_res4(ip, mags, tcontrast, models)
-    #plot_res5(ip, mags, tcontrast, models)
+    #plot_res4(ip, mags, tcontrast, models)
+    plot_res5(ip, mags, tcontrast, models)
     #plot_res6(ip, mags, tcontrast, models)
     #map_uncertainties(mags, tcontrast, ip)
     #plot_unc_results(instrum, ip)
@@ -898,7 +905,9 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
             # Quantiles
             samples = resdict.samples  # samples
             weights = np.exp(resdict.logwt - resdict.logz[-1])  # normalized weights
-            quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+            #quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+            #            weights=weights) for samps in samples.T]
+            quantiles = [dyfunc.quantile(samps, [0.03, 0.50, 0.997], \
                         weights=weights) for samps in samples.T]
 
             yerrup = np.diff(quantiles[0])[1]
@@ -912,14 +921,14 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM'):
                 errup = np.sqrt(yerrup**2)# + 62.**2)
                 errdown = np.sqrt(yerrdown**2)# + 62.**2)
             if j == 0:
-                plt.scatter(-(ip['tstar'] - tumbra), \
+                plt.scatter(-(ip['tstar'] - tumbra) + i*20, \
                     -(ip['tstar'] - toutput), marker=marker[i], s=100, \
                     c=colour[i], label='{}'.format(mag))
             else:
-                plt.scatter(-(ip['tstar'] - tumbra), \
+                plt.scatter(-(ip['tstar'] - tumbra) + i*20, \
                     -(ip['tstar'] - toutput), marker=marker[i], s=100, \
                     c=colour[i])
-            plt.errorbar(-(ip['tstar'] - tumbra), \
+            plt.errorbar(-(ip['tstar'] - tumbra) + i*20, \
                     -(ip['tstar'] - toutput), yerr=([errdown], [errup]), \
                     fmt='-', color=colour[i], capsize=2)
 
@@ -984,7 +993,9 @@ def plot_res5(ip, mags, tcontrast, models, fittype='LM'):
                 # Quantiles
                 samples = resdict.samples  # samples
                 weights = np.exp(resdict.logwt - resdict.logz[-1])  # normalized weights
-                quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                #quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                #            weights=weights) for samps in samples.T]
+                quantiles = [dyfunc.quantile(samps, [0.05, 0.50, 0.95], \
                             weights=weights) for samps in samples.T]
 
                 yerrup = np.diff(quantiles[0])[1]
@@ -1068,7 +1079,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM'):
                 # Quantiles
                 samples = resdict.samples  # samples
                 weights = np.exp(resdict.logwt - resdict.logz[-1])  # normalized weights
-                quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
                             weights=weights) for samps in samples.T]
 
                 yerrup = np.diff(quantiles[0])[1]
@@ -1119,7 +1130,15 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM'):
 
     return
 
-def main2(spotsize, latspot=0.):
+def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False):
+    '''
+    Parameters
+    ----------
+
+    Instruments: list for NIRCam and/or NIRSpec_Prism
+    thetas: list for limb-angle values
+    stars: list for K and M star
+    '''
 
     if latspot == 0.:
         incl = 90.
@@ -1128,25 +1147,33 @@ def main2(spotsize, latspot=0.):
     else:
         print('Undefined scenario')
         return
-    for m, instrum in enumerate(['NIRCam', 'NIRSpec_Prism']):
+
+    for m, instrum in enumerate(instruments):
         for j, incl in enumerate([incl]):
-            for k, theta in enumerate([40.]): # or mu angle 0.., 40
-                inputpars = {}
-                #inputpars['aumbra'] = asize
-                inputpars['incl'] = incl
-                inputpars['theta'] = theta
-                inputpars['aumbra'] = spotsize
-                inputpars['latspot'] = latspot
-                #cycle(0.25, 0.47, 3500, 5.0, instrum, \
-                #    simulate_transits=False, fit_transits=True, \
-                #    fit_spectra=True, spotted_starmodel=False, \
-                #    inputpars=inputpars, update=False, chi2rplot=True, \
-                #    model='batman')
-                cycle(0.75, 0.75, 5000, 4.5, instrum, \
-                    simulate_transits=True, fit_transits=True, \
-                    fit_spectra=True, spotted_starmodel=False, \
-                    inputpars=inputpars, update=False, chi2rplot=True, \
-                    model='batman')
+            for k, theta in enumerate(thetas): # mu angle 0.., 40
+                for m, star in enumerate(stars):
+                    if star == 'K':
+                        rp = 0.25
+                        rs = 0.47
+                        ts = 3500.
+                        logg = 5.0
+                    elif star == 'M':
+                        rp = 0.75
+                        rs = 0.75
+                        ts = 5000.
+                        logg = 4.5
+                    if latspot == 21.:
+                        theta = 21
+                    inputpars = {}
+                    inputpars['incl'] = incl
+                    inputpars['theta'] = theta
+                    inputpars['aumbra'] = spotsize
+                    inputpars['latspot'] = latspot
+                    cycle(rp, rs, ts, logg, instrum, \
+                        simulate_transits=True, fit_transits=True, \
+                        fit_spectra=True, spotted_starmodel=False, \
+                        inputpars=inputpars, update=False, chi2rplot=True, \
+                        model='batman', noscatter=noscatter)
 
     return
 
@@ -1175,7 +1202,7 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
         rplanet = 0.25
         loggstar = 5.0
     cycle(rplanet, rstar, tstar, loggstar, instrument, \
-            simulate_transits=True, fit_transits=True, \
+            simulate_transits=False, fit_transits=False, \
             fit_spectra=True, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman')
 

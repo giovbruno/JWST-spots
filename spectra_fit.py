@@ -37,7 +37,7 @@ plt.ioff()
 
 def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
             LM=True, model='KSint', plot_input_spectrum=True, \
-            mcmc=False, nest=False):
+            mcmc=False, nest=False, nest_transits=True):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
@@ -72,78 +72,82 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
     global polyhere
     polyhere = []
     for i in np.concatenate((np.arange(expchan - 1), [-1])):
-        #try:
-        ffopen = open(pardict['chains_folder'] + 'chains_' \
+        if not nest_transits:
+            ffopen = open(pardict['chains_folder'] + 'chains_' \
                 + str(model) + '_' + str(i) + '.pic', 'rb')
-        #except FileNotFoundError: # old version
-        #    ffopen = open(pardict['chains_folder'] + 'chains_' \
-        #            + str(i) + '.pic', 'rb')
-        res = pickle.load(ffopen)
-        if model != 'KSint':
+            res = pickle.load(ffopen)
+            if model != 'KSint':
+                if i == bestbin:
+                    perc = res['Percentiles'][0][-6]
+                    tspot = res['Percentiles'][0][-3][2]
+                    # Get spot width from distance between Gaussian 3-sigma distance
+                    # (one side)
+                    wspot = res['Percentiles'][0][-4][2]*3
+                    # Get transit parameters to compute transit duration
+                    # kr, q1, q2, incl, t0
+                    delta, planet_angle = get_spot_size(wspot, pardict, res)
+                    print('Spot angular size:', np.round(np.degrees(delta), 2), \
+                                'deg')
+                else:
+                    wl.append(res['wl'])
+                    perc = res['Percentiles'][0][-1]
+                    tspot = res['Percentiles'][0][-1][2]
+                    A.append(perc[2])
+                    yerrup.append(perc[3] - perc[2])
+                    yerrdown.append(perc[2] - perc[1])
+                r0.append(res['Percentiles'][0][3][2])
+                r1.append(res['Percentiles'][0][4][2])
+                r2.append(res['Percentiles'][0][5][2])
+                kr.append(res['Percentiles'][0][0][2])
+                unckr.append(np.mean([res['Percentiles'][0][0][3] \
+                            - res['Percentiles'][0][0][2], \
+                    res['Percentiles'][0][0][2] \
+                    - res['Percentiles'][0][0][1]]))
+                # Get polynomial here
+                polyhere.append(np.polyval([r0[i], r1[i], r2[i]], tspot))
+                ffopen.close()
+            else:
+                if i == bestbin:
+                    continue
+                else:
+                    wl.append(res['wl'])
+                    perc = res['Percentiles'][0][-1]
+                    A.append(perc[2])
+                    yerrup.append(perc[3] - perc[2])
+                    yerrdown.append(perc[2] - perc[1])
+                    ffopen.close()
+                polyhere.append(1.)
+        else:
+            ffopen = open(pardict['chains_folder'] \
+                        + 'transit_' + str(i) + '_nested_spec.pickle', 'rb')
+            sresults = pickle.load(ffopen)
+            ffopen.close()
+            samples = sresults['samples']
+            weights = np.exp(sresults.logwt - sresults.logz[-1])
+            perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                        weights=weights) for samps in samples.T]
             if i == bestbin:
-                perc = res['Percentiles'][0][-6]
-                tspot = res['Percentiles'][0][-3][2]
-                # Get spot width from distance between Gaussian 3-sigma distance
-                # (one side)
-                wspot = res['Percentiles'][0][-4][2]*3
+                tspot = perc[-3][1]
+                wspot = perc[-4][1]
+                kr.append(perc[0][1])
                 # Get transit parameters to compute transit duration
                 # kr, q1, q2, incl, t0
-                delta = get_spot_size(wspot, pardict, res)
-                print('Spot angular size:', np.round(np.degrees(delta), 2), \
-                            'deg')
+                delta, planet_angle = get_spot_size(wspot, pardict, sresults)
             else:
-                wl.append(res['wl'])
-                perc = res['Percentiles'][0][-1]
-                tspot = res['Percentiles'][0][-1][2]
-                A.append(perc[2])
-                yerrup.append(perc[3] - perc[2])
-                yerrdown.append(perc[2] - perc[1])
-            r0.append(res['Percentiles'][0][3][2])
-            r1.append(res['Percentiles'][0][4][2])
-            r2.append(res['Percentiles'][0][5][2])
-            kr.append(res['Percentiles'][0][0][2])
-            unckr.append(np.mean([res['Percentiles'][0][0][3] \
-                        - res['Percentiles'][0][0][2], \
-                res['Percentiles'][0][0][2] \
-                - res['Percentiles'][0][0][1]]))
-            # Get polynomial here
-            polyhere.append(np.polyval([r0[i], r1[i], r2[i]], tspot))
-            ffopen.close()
-        else:
-            if i == bestbin:
-                continue
-            else:
-                wl.append(res['wl'])
-                perc = res['Percentiles'][0][-1]
-                A.append(perc[2])
-                yerrup.append(perc[3] - perc[2])
-                yerrdown.append(perc[2] - perc[1])
-                ffopen.close()
-            polyhere.append(1.)
+                wl.append(spec[0][i])
+                kr.append(perc[0][1])
+                A.append(perc[-1][1])
+                yerrup.append(perc[-1][2] - perc[-1][1])
+                yerrdown.append(perc[-1][1] - perc[-1][0])
 
     # Save the solution to reproduce it later
-    #fout1 = open(pardict['chains_folder'] + 'contrast_spec_fit.pic', 'wb')
-    #pickle.dump([wl, A, yerrup, yerrdown], fout1)
-    #fout1.close()
-    #fout2 = open(pardict['chains_folder'] + 'kr_fit.pic', 'wb')
-    #pickle.dump([wl, kr, unckr], fout2)
-    #fout2.close()
-    #set_trace()
-    # Import kr from somewhere else
-    #krfile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRSpec_Prism/#star_5000K/p1.0_star1.0_5000_4.5_spot3800_i90_a5_theta0_mag14.5_noscatter/MCMC/#kr_fit.pic', 'rb')
-    #krf = pickle.load(krfile)
-    #kr = krf[1]
-    #unckr = krf[2]
-    #krfile.close()
-    #Afile = open('/home/giovanni/Projects/jwst_spots/revision1/NIRCam/star_5000K/#p1.0_star1.0_5000_4.5_spot4700_i90_a5_theta0_mag4.5/MCMC/contrast_spec_fit.pic', #'rb')
-    #Af = pickle.load(Afile)
-    #Ac = Af[1]
-    #yerrupc = Af[2]
-    #yerrdownc = Af[3]
-    #Afile.close()
+    fout1 = open(pardict['chains_folder'] + 'contrast_spec_fit.pic', 'wb')
+    pickle.dump([wl, A, yerrup, yerrdown], fout1)
+    fout1.close()
+    fout2 = open(pardict['chains_folder'] + 'kr_fit.pic', 'wb')
+    pickle.dump([wl, kr, unckr], fout2)
+    fout2.close()
 
-    #return
-    #Aref = A[-1]
     #yerrupmed = yerrup[-1]
     #yerrdownmed = yerrdown[-1]
     # Take mean value for spot position
@@ -286,9 +290,9 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                      diffang = 1.
                      maxspotsize = np.pi*np.sin(theta)**2
 
-                global minspotsize
-                minspotsize = delta**2 #/ diffang
-                pardict['minspotsize'] = minspotsize
+                #global minspotsize
+                #minspotsize = delta**2 #/ diffang
+                #pardict['minspotsize'] = minspotsize
                 #params = lmfit.Parameters()
                 #if pardict['tstar'] == 5000.:
                 #    params.add('tspot', value=4100., min=3601., max=4999.)
@@ -296,10 +300,10 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 #    params.add('tspot', value=3100., min=2301., max=3499.)
                 #params.add('delta', value=5., min=1., max=10.)
                 if pardict['tstar'] == 5000:
-                    boundsm = ([3601., 0.], [4999., 1.])
+                    boundsm = ([3601., 0.0], [4999., 1.])
                     p0 = [4100., 0.5]
                 elif pardict['tstar'] == 3500:
-                    boundsm = ([2301., 0.], [3499., 1.])
+                    boundsm = ([2301., 0.0], [3499., 1.])
                     p0 = [3000., 0.5]
                 #if pardict['muindex'] == len(pardict['starmodel']['mus']) - 1:
                 #    boundsm[0][1] = (1. - np.cos(np.mean(kr - 3*unckr))) / (1. \
@@ -315,15 +319,9 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 ispecstar = np.transpose(pardict['starmodel']['spec'])
                 mmu = pardict['starmodel']['mus']
                 f_star = 2.*np.pi*np.trapz(ispecstar*mmu, x=mmu)
-                #params.add('delta', value=.5, min=0., max=10.)
-                #params.add('delta', value=minspotsize, min=minspotsize, max=1.0)
-                #params['delta'].vary = False
                 soln = least_squares(spec_res, p0, bounds=boundsm, \
-                        args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
-                        method='dogbox')
-                #soln = lmfit.minimize(spec_res, params, method='leastsq', \
-                #        args=(A, yerrup, yerrdown, wl, zz, pardict, f_star))
-                #lmfit.printfuncs.report_fit(soln)
+                    args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
+                    method='dogbox')
                 print('Least squares minimisation results:')
                 print(soln)
                 #bsol = compute_deltaf_f(soln.x, wl, zz, pardict, \
@@ -335,7 +333,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                     res = run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, \
                                 f_star)
                 if nest:
-                    res = nested(soln, A, yerrup, yerrdown, wl, zz, pardict, \
+                    res = nested(2, A, yerrup, yerrdown, wl, zz, pardict, \
                                 f_star)
                 #if plot_input_spectrum:
                 #    # Plot input contrast spectrum
@@ -385,7 +383,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                         + '_LMfit.pdf')
             fout = open(plotname.replace('plot', 'LMfit') + stmod + '_' \
                     + pardict['observatory'] + '.pickle', 'wb')
-            pickle.dump([soln, np.round(np.degrees(delta), 2)], fout)
+            pickle.dump([soln, np.round(np.degrees(-999.), 2)], fout)
             fout.close()
 
             return
@@ -561,7 +559,7 @@ def scalespec2(x, spec, y, yerrup, yerrdown):
 
     return res
 
-def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
+def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
             resume=False):
     '''
     Explore posterior distribution with (static) nested sampling.
@@ -577,16 +575,15 @@ def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
 
     print('\nStarting nested sampling\n')
 
-    ndim = np.shape(soln.x)[0]
     if not read_sol:
         # "Static" nested sampling.
         sampler = dynesty.NestedSampler(lnprob, prior_transform, ndim, \
-                    nlive=200, ptform_args=[pardict], \
+                    nlive=100, ptform_args=[pardict], \
                     logl_args=(A, yerrup, yerrdown, wl, zz, pardict, fstar))
         #sampler = DynamicNestedSampler(lnprob, prior_transform, ndim, \
         #    bound='single', nlive=100, logl_args=(A, yerrup, yerrdown, wl, zz, \
         #    pardict, fstar), ptform_args=[pardict])
-        sampler.run_nested(print_progress=False)
+        sampler.run_nested(print_progress=True)
         sresults = sampler.results
     else:
         sresults = pickle.load(open(pardict['chains_folder'] \
@@ -612,8 +609,8 @@ def nested(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
 
     # Plot a summary of the run.
     labels = [r'$T_\bullet$ [K]', r'$\beta$']#, r'$\gamma$']
-    rfig, raxes = dyplot.runplot(sresults)
-    plt.savefig(pardict['chains_folder'] + '/runplot_nested_spec.pdf')
+    #rfig, raxes = dyplot.runplot(sresults)
+    #plt.savefig(pardict['chains_folder'] + '/runplot_nested_spec.pdf')
     # Plot traces and 1-D marginalized posteriors.
     tfig, taxes = dyplot.traceplot(sresults, labels=labels)
     plt.savefig(pardict['chains_folder'] + '/traceplot_nested_spec.pdf')
@@ -666,9 +663,9 @@ def prior_transform(u, pardict):
     Modified on 2nd Jul 2021
     '''
     if pardict['tstar'] == 5000.:
-        u[0] = 1400. * u[0] + 3600.
+        u[0] = 1300. * u[0] + 3600.
     elif pardict['tstar'] == 3500.:
-        u[0] = 1200. * u[0] + 2300.
+        u[0] = 1100. * u[0] + 2300.
     #u[1] = u[1]*9. + 1.
     u[1] = u[1]
     #u[2] = u[2]
@@ -1142,9 +1139,9 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
     f2f1 = np.pi*kr[:-1]**2*deltaf_f*beta
 
     if plots:
-        print(tspot, ffact)
+        print(tspot, beta)
         plt.close('all')
-        plt.plot(wlobs, deltaf_f*beta)
+        plt.plot(wlobs, f2f1)
         plt.show()
         set_trace()
 
@@ -1255,12 +1252,16 @@ def lnp_jeffreys(val, valmax, valmin):
     '''
     return np.log(1./(val*np.log(valmax/valmin)))
 
-def lnprob(pars, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
+def lnprob(pars, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar, \
+            nested=True):
     '''
     Compute posterior probability for spectrum fit.
     '''
 
-    lp = lnprior(pars, pardict)
+    if not nested:
+        lp = lnprior(pars, pardict)
+    else:
+        lp = 0.
     if not np.isfinite(lp):
         return -np.inf
     else:
@@ -1344,7 +1345,7 @@ def run_mcmc(soln, A, yerrup, yerrdown, wl, zz, pardict, fstar):
 
     return
 
-def get_spot_size(wspot, pardict, dict_chains):
+def get_spot_size(wspot, pardict, dict_chains, transit_model=False):
     '''
     Get starspot size from transit fit. Relate time of occultation crossing
     to T14 for transit. This will get you a lower limit.
@@ -1352,31 +1353,71 @@ def get_spot_size(wspot, pardict, dict_chains):
     Input: wspot (3-sigma width of Gaussian profile fitted to the occultation
     feature).
     '''
+    if transit_model:
+        tpar = []
+        for j in [0, 1, 2, -2, -1]:
+            tpar.append(dict_chains['Percentiles'][0][j][2])
+        if pardict['tstar'] == 3500:
+            tt = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
+        elif pardict['tstar'] == 5000:
+            tt = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
+        # Get observed T14
+        rhostar = 5.14e-5/pardict['rstar']*10**pardict['loggstar'] #cgs
+        per_planet = pardict['pplanet']
+        aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
+        tmod = transit_model([tpar[0], tpar[-1], tpar[-2], 0., 0.], tt, \
+                    0.0, pp=pardict['pplanet'], semimaj=aR)
+        ttr = tmod != 1.
+        tdur = 0.5*(tt[ttr].max() - tt[ttr].min())
+        # Compute space covered during transit, from tangential velocity
+        global Rsun
+        Rsun = 695500e3
+        global semimaj
+        semimaj = aR*pardict['rstar']*Rsun
+        vt = 2.*np.pi*semimaj/(per_planet*86400.)
+        x_star = vt*pardict['rstar']*Rsun
+        #delta = wspot*x_star/(tdur*86400.)/semimaj
+        delta = wspot/tdur*np.arcsin(1./aR)
+        print('Spot-to-star surface ratio: ', delta**2)
+    else:
+        rhostar = 5.14e-5/pardict['rstar']*10**pardict['loggstar'] #cgs
+        per_planet = pardict['pplanet']
+        aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
+        delta = 2.*np.pi*wspot*aR/per_planet
+        print('Min spot radius: ', np.degrees(delta), ' deg')
+        print('Min spot-to-star surface ratio: ', delta**2)
 
-    tpar = []
-    for j in [0, 1, 2, -2, -1]:
-        tpar.append(dict_chains['Percentiles'][0][j][2])
-    if pardict['tstar'] == 3500:
-        tt = np.arange(0.075 - 0.04, 0.125 + 0.04, 60./86400.)
-    elif pardict['tstar'] == 5000:
-        tt = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
-    # Get observed T14
-    rhostar = 5.14e-5/pardict['rstar']*10**pardict['loggstar'] #cgs
-    per_planet = pardict['pplanet']
-    aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
-    tmod = transit_model([tpar[0], tpar[-1], tpar[-2], 0., 0.], tt, \
-                0.0, pp=pardict['pplanet'], semimaj=aR)
-    ttr = tmod != 1.
-    tdur = 0.5*(tt[ttr].max() - tt[ttr].min())
-    # Compute space covered during transit, from tangential velocity
-    global Rsun
-    Rsun = 695500e3
-    global semimaj
-    semimaj = aR*pardict['rstar']*Rsun
-    vt = 2.*np.pi*semimaj/(per_planet*86400.)
-    x_star = vt*pardict['rstar']*Rsun
-    #delta = wspot*x_star/(tdur*86400.)/semimaj
-    delta = wspot/tdur*np.arcsin(1./aR)
-    print('Spot-to-star surface ratio: ', delta**2)
+    planet_angle = np.degrees(pardict['rplanet']/pardict['rstar']/aR)
 
-    return delta
+    return delta, planet_angle
+
+def plot_fitted_spectra(instrument, tstar, mag):
+
+    if tstar == 5000:
+        logg = 4.5
+        rp = 0.75
+        rs = 0.75
+        temp = np.arange(3800, 5000, 300)
+    elif tstar == 3500:
+        logg = 5.0
+        rp = 0.25
+        rs = 0.47
+        temp = np.arange(2600, 3500, 300)
+    ffolder = '/home/giovanni/Projects/jwst_spots/revision1/'
+    ffiles = ['contrast_spec_fit.pic', 'kr_fit.pic']
+
+    for i in temp:
+        for j, th in enumerate([0, 40]):
+            for k, ff in enumerate(ffiles):
+                specfile = pickle.load(open(ffolder + instrument + '/star_' \
+                + str(int(tstar)) + 'K/p' + str(rp) + '_star' + str(rs) + '_' \
+                + str(tstar) + '_' + str(logg) + '_spot' + str(int(i)) \
+                + '_i90_a3_theta' + str(int(th)) + '_mag' + str(mag) \
+                + '/MCMC/' + ff, 'rb'))
+                plt.figure(j*10 + k*50)
+                plt.plot(specfile[0], specfile[1][:len(specfile[0])], label=str(i))
+                plt.title(ff + r' $\theta=' + str(th) + '^\circ$')
+                plt.legend()
+    plt.show()
+
+    return

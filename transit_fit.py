@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
-from scipy.special import erf
+from scipy import stats
 import os, sys, pickle
 import emcee
 from emcee.autocorr import integrated_time
@@ -12,6 +12,10 @@ sys.path.append('../KSint_wrapper/SRC/')
 import ksint_wrapper_fitcontrast
 import get_uncertainties
 import lmfit
+import dynesty
+from dynesty import plotting as dyplot
+from dynesty import utils as dyfunc
+from dynesty import DynamicNestedSampler
 from pdb import set_trace
 plt.ioff()
 
@@ -47,7 +51,7 @@ def transit_spectro(pardict, resol=10, model='KSint'):
 
     return
 
-def transit_emcee(diz, ind, bestbin, model='KSint', resume=False):
+def transit_emcee(diz, ind, bestbin, model='KSint', resume=False, nested=True):
 
     if resume and os.path.exists(diz['chains_folder'] \
                     + '/chains_' + str(model) + '_' + str(ind) + '.pic'):
@@ -72,263 +76,376 @@ def transit_emcee(diz, ind, bestbin, model='KSint', resume=False):
     aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
     print('aR = ', aR)
     global modeltype
-    if model == 'batman' or model == 'pytransit':
-        # LM fit boundaries - fit for t0 and x0 only on the first channel
-        bounds_model = []
-        bounds_model.append((0.01, 0.2))         # rp/r*
-        bounds_model.append((0., 0.5))          # q1 from Kipping+2013
-        bounds_model.append((0., 0.5))
-        #if diz['tstar'] == 3500:
-        #    bounds_model.append((0.01, 0.2))          # q1 from Kipping+2013
-        #    bounds_model.append((0.15, 0.3))          # q2
-        #elif diz['tstar'] == 5000:
-        #    bounds_model.append((0.15, 0.3))          # q1 from Kipping+2013
-        #    bounds_model.append((0.15, 0.3))
-        bounds_model.append((-1., 1.))           # r0
-        bounds_model.append((-1., 1.))           # r1
-        bounds_model.append((0., 10.))           # r2
-        bounds_model.append((1e-4, 1))           # A
-        bounds_model.append((2., 10.))           # n # Flat gaussian
-        bounds_model.append((np.diff(t).min(), 0.1))         # sigma
-        if int(diz['theta']) == 0:
-            bounds_model.append((0.09, 0.11))        # x0 = 0.1051
-        elif int(diz['theta']) == 40:
-            bounds_model.append((0.105, 0.15))
-        bounds_model.append((80., 90.))          # orbit inclination
-        bounds_model.append((0.08, 0.12))        # t0
-        #bounds = [[], []]
-        #for i in np.arange(len(bounds_model)):
-        #    bounds[0].append(bounds_model[i][0])
-        #    bounds[1].append(bounds_model[i][1])
-
-        # Initial values
-        kr, r0, r1, r2 = 0.09, -1e-3, -1e-3, 1.
-        if diz['tstar'] == 3500:
-            q1, q2 = 0.1, 0.15
-        elif diz['tstar'] == 5000:
-            q1, q2 = 0.2, 0.22
-        if diz['theta'] == 0.:
-            tspot_ = 0.1#0.095
-        else:
-            if diz['tstar'] == 3500:
-                #if diz['instrument'] == 'NIRCam':
-                tspot_ = 0.115
-                if diz['latspot'] == 21.:
-                    tspot_ = 0.105
-                #else:
-                #    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
-            else:
-                tspot_ = 0.135
-        A, wspot_ = 2e-3, 0.01
-        incl_, t0_ = 89., 0.1
-        n = 2.05
-
-        # This will set the fit or fix for tspot and spot size
-        # Spot position and size are fitted only on the bluemost wavelength bin
-        if ind == bestbin:
-            modeltype = 'fitt0'
-            initial_params = kr, q1, q2, r0, r1, r2, A, n, \
-                                wspot_, tspot_, incl_, t0_
-        else:
-            modeltype = 'fixt0'
-            # Extract spot time from first wavelength bin
-            ffopen = open(diz['chains_folder'] + 'chains_' + str(model) \
-                + '_' + str(bestbin) + '.pic', 'rb')
-            res = pickle.load(ffopen)
-            perc = res['Percentiles'][0]
-            # These will be fixed in the fit
-            global wspot
-            global tspot
-            global incl
-            global t0
-            global nspot
-            nspot = perc[-5][2]
-            wspot = perc[-4][2]
-            tspot = perc[-3][2]
-            incl = perc[-2][2]
-            t0 = perc[-1][2]
-            initial_params = kr, q1, q2, r0, r1, r2, A
-            bounds_model = bounds_model[:-5]
+    if not nested:
+        if model == 'batman' or model == 'pytransit':
+            # LM fit boundaries - fit for t0 and x0 only on the first channel
+            bounds_model = []
+            bounds_model.append((0.01, 0.2))         # rp/r*
+            bounds_model.append((0., 0.5))          # q1 from Kipping+2013
+            bounds_model.append((0., 0.5))
+            #if diz['tstar'] == 3500:
+            #    bounds_model.append((0.01, 0.2))          # q1 from Kipping+2013
+            #    bounds_model.append((0.15, 0.3))          # q2
+            #elif diz['tstar'] == 5000:
+            #    bounds_model.append((0.15, 0.3))          # q1 from Kipping+2013
+            #    bounds_model.append((0.15, 0.3))
+            bounds_model.append((-1., 1.))           # r0
+            bounds_model.append((-1., 1.))           # r1
+            bounds_model.append((0., 10.))           # r2
+            bounds_model.append((1e-4, 1))           # A
+            bounds_model.append((2., 6.))           # n # Flat gaussian
+            bounds_model.append((np.diff(t).min(), 0.02))         # sigma
+            if int(diz['theta']) == 0:
+                bounds_model.append((0.09, 0.11))        # x0 = 0.1051
+            elif int(diz['theta']) == 40:
+                bounds_model.append((0.105, 0.125))
+            bounds_model.append((80., 90.))          # orbit inclination
+            bounds_model.append((0.08, 0.12))        # t0
             #bounds = [[], []]
-            #for i in np.arange(len(bounds_model[:-5])):
+            #for i in np.arange(len(bounds_model)):
             #    bounds[0].append(bounds_model[i][0])
             #    bounds[1].append(bounds_model[i][1])
 
-        fix_dict = {}
-        # LM fit
-        options= {}
-        #ftol = 1e-10
-        #options['ftol'] = ftol
-        nll = lambda *args: -lnlike(*args)
-        soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
-             args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
-             options=options)
-        #soln = least_squares(residuals, initial_params, bounds=bounds, \
-        #        args=(t, y, yerr, model, fix_dict), method='trf')
-
-    elif model == 'KSint':
-        bounds_model = []
-        bounds_model.append((0.01, 0.2))         # rp/r*
-        bounds_model.append((245., 255.))        # M
-        bounds_model.append((1e-6, 1. - 1e-6))   # q1
-        bounds_model.append((1e-6, 1. - 1e-6))   # q2
-        bounds_model.append((260., 270.))        # long spot
-        bounds_model.append((1., 10.))           # a umbra
-        bounds_model.append((1e-6, 1.))          # contrast
-        bounds_model.append((80., 100.))         # inclination
-        # Initial values
-        kr, M, q1, q2, long, aumbra, contr = 0.09, 250., 0.3, 0.3, 265., 3., 0.5
-        if diz['theta'] == 0.:
-            tspot_ = 0.1#0.095 #0.1
-        else:
+            # Initial values
+            kr, r0, r1, r2 = 0.09, -1e-3, -1e-3, 1.
             if diz['tstar'] == 3500:
-                if diz['instrument'] == 'NIRCam':
-                    tspot_ = 0.10#0.115
-                else:
-                    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
+                q1, q2 = 0.1, 0.15
+            elif diz['tstar'] == 5000:
+                q1, q2 = 0.2, 0.22
+            if diz['theta'] == 0.:
+                tspot_ = 0.1#0.095
             else:
-                tspot_ = 0.1 # 0.13
-        incl = 89.
-        fout2 = open(diz['data_folder'] + 'KSint_pars.pic', 'rb')
-        fix_dict = pickle.load(fout2)
-        fout2.close()
+                if diz['tstar'] == 3500:
+                    #if diz['instrument'] == 'NIRCam':
+                    tspot_ = 0.115
+                    if diz['latspot'] == 21.:
+                        tspot_ = 0.105
+                    #else:
+                    #    tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
+                else:
+                    tspot_ = 0.135
+            A, wspot_ = 2e-3, 0.01
+            incl_, t0_ = 89., 0.1
+            n = 2.05
 
-        # This will set the fit or fix for tspot and spot size
-        # Spot position and size are fitted only on the bluemost wavelength bin
+            # This will set the fit or fix for tspot and spot size
+            # Spot position and size are fitted only on the bluemost wavelength bin
+            if ind == bestbin:
+                modeltype = 'fitt0'
+                initial_params = kr, q1, q2, r0, r1, r2, A, n, \
+                                    wspot_, tspot_, incl_, t0_
+            else:
+                modeltype = 'fixt0'
+                # Extract spot time from first wavelength bin
+                ffopen = open(diz['chains_folder'] + 'chains_' + str(model) \
+                    + '_' + str(bestbin) + '.pic', 'rb')
+                res = pickle.load(ffopen)
+                perc = res['Percentiles'][0]
+                # These will be fixed in the fit
+                fix_dict = {}
+                fix_dict['nspot'] = perc[-5][2]
+                fix_dict['wspot'] = perc[-4][2]
+                fix_dict['tspot'] = perc[-3][2]
+                fix_dict['incl'] = perc[-2][2]
+                fix_dict['t0'] = perc[-1][2]
+                initial_params = kr, q1, q2, r0, r1, r2, A
+                bounds_model = bounds_model[:-5]
+                #bounds = [[], []]
+                #for i in np.arange(len(bounds_model[:-5])):
+                #    bounds[0].append(bounds_model[i][0])
+                #    bounds[1].append(bounds_model[i][1])
+
+            # LM fit
+            options= {}
+            #ftol = 1e-10
+            #options['ftol'] = ftol
+            nll = lambda *args: -lnlike(*args)
+            soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
+                 args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
+                 options=options)
+            #soln = least_squares(residuals, initial_params, bounds=bounds, \
+            #        args=(t, y, yerr, model, fix_dict), method='trf')
+
+        elif model == 'KSint':
+            bounds_model = []
+            bounds_model.append((0.01, 0.2))         # rp/r*
+            bounds_model.append((245., 255.))        # M
+            bounds_model.append((1e-6, 1. - 1e-6))   # q1
+            bounds_model.append((1e-6, 1. - 1e-6))   # q2
+            bounds_model.append((260., 270.))        # long spot
+            bounds_model.append((1., 10.))           # a umbra
+            bounds_model.append((1e-6, 1.))          # contrast
+            bounds_model.append((80., 100.))         # inclination
+            # Initial values
+            kr, M, q1, q2, long, aumbra, contr = 0.09, 250., 0.3, 0.3, 265., 3., 0.5
+            if diz['theta'] == 0.:
+                tspot_ = 0.1#0.095 #0.1
+            else:
+                if diz['tstar'] == 3500:
+                    if diz['instrument'] == 'NIRCam':
+                        tspot_ = 0.10#0.115
+                    else:
+                        tspot_ = 0.115#0.95 # This seems to work better for NIRSpec
+                else:
+                    tspot_ = 0.1 # 0.13
+            incl = 89.
+            fout2 = open(diz['data_folder'] + 'KSint_pars.pic', 'rb')
+            fix_dict = pickle.load(fout2)
+            fout2.close()
+
+            # This will set the fit or fix for tspot and spot size
+            # Spot position and size are fitted only on the bluemost wavelength bin
+            if ind == bestbin:
+                modeltype = 'fitt0'
+                initial_params = kr, M, q1, q2, long, aumbra, contr, incl
+            else:
+                modeltype = 'fixt0'
+                # Extract spot time from first wavelength bin
+                ffopen = open(diz['chains_folder'] + 'chains_' + str(model) \
+                    + '_' + str(bestbin) + '.pickle', 'rb')
+                res = pickle.load(ffopen)
+                perc = res['Percentiles'][0]
+                # These will be fixed in the fit
+                fix_dict['M'] = perc[1][2]
+                fix_dict['longspot'] = perc[-4][2]
+                fix_dict['aspot'] = perc[-3][2]
+                fix_dict['incl'] = perc[-1][2]
+                initial_params = kr, q1, q2, contr
+                bounds_model = [element for i, element in enumerate(bounds_model) \
+                            if i in [0, 2, 3, 6]]
+
+            # LM fit
+            options= {}
+            ftol = 1e-10
+            options['ftol'] = ftol
+            nll = lambda *args: -lnlike(*args)
+            soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
+                 args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
+                 options=options)
+
+        print('Likelihood maximimazion results:')
+        print(soln.x)
+        # This contains the spot signal with the transit model removed
+        plot_best(soln, t, y, yerr, \
+                diz['chains_folder'] + 'best_LM_' + str(model) + '_' + str(ind) \
+                + '.pdf', model=model, fix_dict=fix_dict)
+
+        # Now, MCMC starting about the optimized solution
+        initial = np.array(soln.x)
         if ind == bestbin:
-            modeltype = 'fitt0'
-            initial_params = kr, M, q1, q2, long, aumbra, contr, incl
+            ndim, nwalkers = len(initial), 128
+            iters = 2000
+            if diz['latspot'] == 21:
+                iters=4000
         else:
-            modeltype = 'fixt0'
-            # Extract spot time from first wavelength bin
-            ffopen = open(diz['chains_folder'] + 'chains_' + str(model) \
-                + '_' + str(bestbin) + '.pickle', 'rb')
-            res = pickle.load(ffopen)
-            perc = res['Percentiles'][0]
-            # These will be fixed in the fit
-            fix_dict['M'] = perc[1][2]
-            fix_dict['longspot'] = perc[-4][2]
-            fix_dict['aspot'] = perc[-3][2]
-            fix_dict['incl'] = perc[-1][2]
-            initial_params = kr, q1, q2, contr
-            bounds_model = [element for i, element in enumerate(bounds_model) \
-                        if i in [0, 2, 3, 6]]
-
-        # LM fit
-        options= {}
-        ftol = 1e-10
-        options['ftol'] = ftol
-        nll = lambda *args: -lnlike(*args)
-        soln = minimize(nll, initial_params, jac=False, method='L-BFGS-B', \
-             args=(t, y, yerr, model, fix_dict), bounds=bounds_model, \
-             options=options)
-
-    print('Likelihood maximimazion results:')
-    print(soln.x)
-    # This contains the spot signal with the transit model removed
-    plot_best(soln, t, y, yerr, \
-            diz['chains_folder'] + 'best_LM_' + str(model) + '_' + str(ind) \
-            + '.pdf', model=model, fix_dict=fix_dict)
-
-    # Now, MCMC starting about the optimized solution
-    initial = np.array(soln.x)
-    if ind == bestbin:
-        ndim, nwalkers = len(initial), 128
-        iters = 2000
-        if diz['latspot'] == 21:
-            iters=4000
-    else:
-        ndim, nwalkers = len(initial), 64
-        iters = 1000
-        if diz['latspot'] == 21:
-            iters=2000
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
-        args=([t, y, yerr, model, fix_dict]))
-    # Variation around LM solution
-    pos = initial*(1. + 0.01*(np.random.randn(nwalkers, ndim)))
-            #+ 1e-6*(np.random.randn(nwalkers, ndim))
-    # Check condition number (must be < 1e8 to maximise walker linear
-    # independence). Problems might be caued by LM results = 0
-    cond = np.linalg.cond(pos)
-    while cond >= 1e8:
-        pos += 1e-4*(np.random.randn(nwalkers, ndim))
+            ndim, nwalkers = len(initial), 64
+            iters = 1000
+            if diz['latspot'] == 21:
+                iters=2000
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, \
+            args=([t, y, yerr, model, fix_dict, False]))
+        # Variation around LM solution
+        pos = initial*(1. + 0.01*(np.random.randn(nwalkers, ndim)))
+                #+ 1e-6*(np.random.randn(nwalkers, ndim))
+        # Check condition number (must be < 1e8 to maximise walker linear
+        # independence). Problems might be caued by LM results = 0
         cond = np.linalg.cond(pos)
+        while cond >= 1e8:
+            pos += 1e-4*(np.random.randn(nwalkers, ndim))
+            cond = np.linalg.cond(pos)
 
-    print("Running MCMC...")
+        print("Running MCMC...")
 
-    sampler.run_mcmc(pos, iters, progress=False)
+        sampler.run_mcmc(pos, iters, progress=False)
 
-    # Merge in a single chain
-    samples = sampler.get_chain(discard=300, thin=1, flat=True)
-    # Inclination is symmetric wrt 90°
-    if ind == bestbin:
-        high_incl = samples[:, -2] > 90.
-        samples[high_incl, -2] -= 2.*(samples[high_incl, -2] - 90.)
-    lnL = sampler.get_log_prob(discard=300, thin=1, flat=True)
-    best_sol = samples[lnL.argmax()]
-    print("Mean acceptance fraction: {0:.3f}"
-                .format(np.mean(sampler.acceptance_fraction)))
-    # Inspect convergence using the integrated autocorrelation time
-    # (https://emcee.readthedocs.io/en/stable/tutorials/autocorr/)
-    autocorr_time = [integrated_time(i, quiet=True)[0] for i in samples.T]
-    autocorr_multiples = np.shape(samples)[0]/np.array(autocorr_time)
+        # Merge in a single chain
+        samples = sampler.get_chain(discard=300, thin=1, flat=True)
+        # Inclination is symmetric wrt 90°
+        if ind == bestbin:
+            high_incl = samples[:, -2] > 90.
+            samples[high_incl, -2] -= 2.*(samples[high_incl, -2] - 90.)
+        lnL = sampler.get_log_prob(discard=300, thin=1, flat=True)
+        best_sol = samples[lnL.argmax()]
+        print("Mean acceptance fraction: {0:.3f}"
+                    .format(np.mean(sampler.acceptance_fraction)))
+        # Inspect convergence using the integrated autocorrelation time
+        # (https://emcee.readthedocs.io/en/stable/tutorials/autocorr/)
+        autocorr_time = [integrated_time(i, quiet=True)[0] for i in samples.T]
+        autocorr_multiples = np.shape(samples)[0]/np.array(autocorr_time)
 
-    percentiles = [np.percentile(samples[:,i], [4.55, 15.9, 50, 84.1, 95.45]) \
-                        for i in np.arange(np.shape(samples)[1])]
+        percentiles = [np.percentile(samples[:,i], [4.55, 15.9, 50, 84.1, 95.45]) \
+                            for i in np.arange(np.shape(samples)[1])]
 
-    plot_samples(samples, best_sol, t, y, yerr, wl, \
-            diz['chains_folder'] + 'samples_MCMC_' + str(model) + '_' \
-            + str(ind) + '.pdf', model=model, fix_dict=fix_dict)
+        plot_samples(samples, best_sol, t, y, yerr, wl, \
+                diz['chains_folder'] + 'samples_MCMC_' + str(model) + '_' \
+                + str(ind) + '.pdf', model=model, fix_dict=fix_dict)
 
-    if model != 'KSint':
+        if model != 'KSint':
+            if ind == bestbin:
+                titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', \
+                        r'$r_0$', r'$r_1$', r'$r_2$', \
+                        r'$\alpha_\mathrm{spot}$', r'$n$', r'$w_\mathrm{spot}$', \
+                        '$t_\mathrm{spot}$', r'$i$', '$t_\mathrm{tr}$']
+            else:
+                titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', \
+                            r'$r_0$', r'$r_1$', r'$r_2$', \
+                            r'$\alpha_\mathrm{spot}$']
+        else:
+            if ind == bestbin:
+                titles = [r'$R_\mathrm{p}/R_\star$', r'$M$', r'$u_1$', r'$u_2$', \
+                        r'$\phi_\mathrm{spot}$', r'$A_\mathrm{spot}$', \
+                        '$C$', '$i$']
+            else:
+                titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', '$C$']
+
+        truths = None
+        if ind == 0 or ind == bestbin:
+            cornerplot.cornerplot(samples, titles, truths, \
+             diz['chains_folder'] + '/corner_' + model + '_' + str(ind) + '.pdf', \
+             ranges=None)
+        plt.close('all')
+        # Starspot size
+        #size = starspot_size(diz, samples, str(ind))
+
+        # Save chains
+        fout = open(diz['chains_folder'] + '/chains_' + str(model) + '_' + str(ind) \
+                                                        + '.pic', 'wb')
+        chains_save = {}
+        chains_save['wl'] = wl
+        chains_save['LM'] = soln.x
+        chains_save['Chains'] = samples
+        #chains_save['Starspot_size'] = size
+        chains_save['Mean_acceptance_fraction'] \
+                                        = np.mean(sampler.acceptance_fraction)
+        chains_save['Autocorr_multiples'] = autocorr_multiples
+        chains_save["Percentiles"] = [percentiles]
+        chains_save["ln_L"] = lnL
+        pickle.dump(chains_save, fout)
+        fout.close()
+
+        #fout = open(diz['chains_folder'] + '/chains_best_' + str(model) \
+        #            + '_' + str(ind) + '.p', 'wb')
+        #pickle.dump(best_sol, fout)
+        #fout.close()
+    elif nested:
+        fix_dict = {}
         if ind == bestbin:
             titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', \
                     r'$r_0$', r'$r_1$', r'$r_2$', \
                     r'$\alpha_\mathrm{spot}$', r'$n$', r'$w_\mathrm{spot}$', \
                     '$t_\mathrm{spot}$', r'$i$', '$t_\mathrm{tr}$']
+            modeltype = 'fitt0'
+            nlive = 200
         else:
             titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', \
                         r'$r_0$', r'$r_1$', r'$r_2$', \
                         r'$\alpha_\mathrm{spot}$']
-    else:
-        if ind == bestbin:
-            titles = [r'$R_\mathrm{p}/R_\star$', r'$M$', r'$u_1$', r'$u_2$', \
-                    r'$\phi_\mathrm{spot}$', r'$A_\mathrm{spot}$', \
-                    '$C$', '$i$']
-        else:
-            titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', '$C$']
+            modeltype = 'fixt0'
+            nlive = 150
+            ffopen = open(diz['chains_folder'] \
+                        + 'transit_-1_nested_spec.pickle', 'rb')
+            sresults = pickle.load(ffopen)
+            samples = sresults['samples']
+            weights = np.exp(sresults.logwt - sresults.logz[-1])
+            perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                        weights=weights) for samps in samples.T]
+            # These will be fixed during the fit
+            fix_dict['nspot'] = perc[-5][1]
+            fix_dict['wspot'] = perc[-4][1]
+            fix_dict['tspot'] = perc[-3][1]
+            fix_dict['incl'] = perc[-2][1]
+            fix_dict['t0'] = perc[-1][1]
 
-    truths = None
-    if ind == 0 or ind == bestbin:
-        cornerplot.cornerplot(samples, titles, truths, \
-         diz['chains_folder'] + '/corner_' + model + '_' + str(ind) + '.pdf', \
-         ranges=None)
-    plt.close('all')
-    # Starspot size
-    #size = starspot_size(diz, samples, str(ind))
+        ndim = len(titles)
+        sampler = dynesty.NestedSampler(lnprob, prior_transform, ndim, \
+                        nlive=nlive, ptform_args=[diz, t], \
+                        logl_args=(t, y, yerr, model, fix_dict, True))
+        sampler.run_nested(print_progress=True)
+        sresults = sampler.results
 
-    # Save chains
-    fout = open(diz['chains_folder'] + '/chains_' + str(model) + '_' + str(ind) \
-                                                    + '.pic', 'wb')
-    chains_save = {}
-    chains_save['wl'] = wl
-    chains_save['LM'] = soln.x
-    chains_save['Chains'] = samples
-    #chains_save['Starspot_size'] = size
-    chains_save['Mean_acceptance_fraction'] \
-                                    = np.mean(sampler.acceptance_fraction)
-    chains_save['Autocorr_multiples'] = autocorr_multiples
-    chains_save["Percentiles"] = [percentiles]
-    chains_save["ln_L"] = lnL
-    pickle.dump(chains_save, fout)
-    fout.close()
+        samples = sresults['samples']
+        weights = np.exp(sresults.logwt - sresults.logz[-1])
+        samples_equal = dyfunc.resample_equal(samples, weights)
+        best_sol = samples_equal[sresults['logl'].argmax()]
+        plot_samples(samples_equal, best_sol, t, y, yerr, wl, \
+                diz['chains_folder'] + 'samples_nested_' + str(model) + '_' \
+                + str(ind) + '.pdf', model=model, fix_dict=fix_dict)
+        # Save chains
+        fout = open(diz['chains_folder'] + 'transit_' + str(ind) \
+                + '_nested_spec.pickle', 'wb')
+        pickle.dump(sresults, fout)
+        fout.close()
 
-    #fout = open(diz['chains_folder'] + '/chains_best_' + str(model) \
-    #            + '_' + str(ind) + '.p', 'wb')
-    #pickle.dump(best_sol, fout)
-    #fout.close()
+        # Diagnostic plots
+        if ind == -1 or ind == 0:
+            #try:
+            #   rfig, raxes = dyplot.runplot(sresults)
+            #except IndexError:
+            #   rfig, raxes = dyplot.runplot(sresults, span=[(0., 10.), \
+            #                    0.001, 0.2, (5., 6.)])
+            #plt.savefig(diz['chains_folder'] + '/transit_' + str(ind) \
+            #            + '_runplot_nested_spec.pdf')
+            # Plot traces and 1-D marginalized posteriors.
+            tfig, taxes = dyplot.traceplot(sresults, labels=titles)
+            plt.savefig(diz['chains_folder'] + 'transit_' + str(ind) \
+                    + '_traceplot_nested_spec.pdf')
+            # Plot the 2-D marginalized posteriors.
+            label_kwargs = {}
+            label_kwargs['fontsize'] = 14
+            cfig, caxes = dyplot.cornerplot(sresults, color='b', show_titles=True, \
+                    labels=titles, quantiles=[0.159, 0.50, 0.841], title_fmt='.4f')
+            plt.savefig(diz['chains_folder'] + 'transit_' + str(ind) \
+                    + '_cornerplot_nested_spec.pdf')
+            plt.close('all')
 
     return
+
+def prior_transform(u, diz, t):
+    '''
+    Transforms the uniform random variable `u ~ Unif[0., 1.)`
+    to the parameters of interest.
+    '''
+
+    x = np.array(u)
+
+    if len(u) == 12:
+        #x[0] = u[0]*0.19 + 0.01 # rp/r*
+        x[0] = stats.loguniform.ppf(u[0], 0.01, 0.2)
+        #xx = np.linspace(0.01, 0.2, 1000)
+        #yy = lnp_jeffreys(xx, 0.2, 0.01)
+        #zz = stats.rv_discrete(a=xx.min(), b=xx.max(), values=(xx, yy))
+        #x[0] = zz.ppf(u[0])
+        x[1] = u[1] # u1
+        x[2] = u[2] # u2
+        x[3] = -1. + 2.*u[3] # r0
+        x[4] = -1. + 2.*u[4] # r1
+        x[5] = 10.*u[5] # r2
+        x[6] = u[6] + 1.e-4 # A
+        x[7] = u[7]*6. + 2. # n
+        x[8] = u[8]*0.02 + np.diff(t).min() # w
+        if int(diz['theta']) == 0:
+            x[9] = u[9]*0.02 + 0.09 # x0
+        elif int(diz['theta']) == 40:
+            x[9] = u[9]*0.02 + 0.11
+        elif int(diz['theta']) == 21:
+            x[9] = u[9]*0.02 + 0.10
+        #xx = np.linspace(np.radians(80.), np.pi/2., 1000)
+        #yy = lnp_sine(xx, np.radians(90.), np.radians(80.))
+        #yy /= np.sum(yy)
+        #zz = stats.rv_continuous(a=xx.min(), b=xx.max(), values=(xx, yy))
+        x[10] = u[10]*10. + 80. # i
+        #x[10] = zz.ppf(u[10])
+        x[11] = u[11]*0.04 + 0.08 # t0
+    elif len(u) == 7:
+        x[0] = stats.loguniform.ppf(u[0], 0.01, 0.2)    # rp/r*
+        x[1] = u[1]
+        x[2] = u[2]
+        x[3] = -1. + 2.*u[3]
+        x[4] = -1. + 2.*u[4]
+        x[5] = 10.*u[5]
+        x[6] = u[6] + 1.e-4
+
+    return x
 
 def chi2(model, y, yerr):
     return np.sum((model - y)**2/yerr**2)
@@ -380,9 +497,9 @@ def plot_best(sol, t, y, yerr, plotname, model='KSint', fix_dict={}, \
     return
 
 def plot_samples(samples, best_sol, t, y, yerr, wl, plotname, \
-                    model='KSint', fix_dict={}):
+                    model='KSint', fix_dict={}, size=300):
     '''
-    Plot 100 random samples
+    Plot 1000 random samples
     '''
     plt.close('all')
     fig1 = plt.figure(1, figsize=(9, 7))
@@ -401,7 +518,7 @@ def plot_samples(samples, best_sol, t, y, yerr, wl, plotname, \
 
     plt.title(r'$\lambda = {} \, \mu$m'.format(np.round(wl, 2)), fontsize=16)
 
-    inds = np.random.randint(np.shape(samples)[0], size=100)
+    inds = np.random.randint(np.shape(samples)[0], size=size)
     xTh = np.linspace(t.min(), t.max(), len(t)*10)
     for ind in inds:
         sample = samples[ind]
@@ -414,8 +531,11 @@ def plot_samples(samples, best_sol, t, y, yerr, wl, plotname, \
     frame2.errorbar(t, (y - best_fit)*1e6, \
             yerr=yerr*1e6, fmt='k.')
 
+    plt.ylim(y.min() - 1e-3, y.max() + 3e-3)
     plt.savefig(plotname)
-    plt.close('all')
+    #plt.show()
+    #set_trace()
+    #plt.close('all')
 
     return
 
@@ -431,11 +551,11 @@ def transit_spot_syst(par, t, model, fix_dict):
         Aspot = par[6]
         #n = par[7]
         if modeltype == 'fixt0':
-            n = nspot
-            sig = wspot
-            x0 = tspot
-            inclin = incl
-            tc = t0
+            n = fix_dict['nspot']
+            sig = fix_dict['wspot']
+            x0 = fix_dict['tspot']
+            inclin = fix_dict['incl']
+            tc = fix_dict['t0']
         else:
             n = par[-5]
             sig = par[-4]
@@ -540,9 +660,12 @@ def transit_model(par, t, u1=0, u2=0, pp=0., semimaj=0.):
     '''
     return flux
 
-def lnprob(params, t, y, yerr, model, fix_dict):
+def lnprob(params, t, y, yerr, model, fix_dict, nested):
 
-    lp = lnprior(params, model)
+    if not nested:
+        lp = lnprior(params, model)
+    else:
+        lp = 0.
     if not np.isfinite(lp):
         return -np.inf
     else:

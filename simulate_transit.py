@@ -179,7 +179,8 @@ def read_pandexo_results(pardict, res=4):
 
     return xobs, yobs, yobs_err
 
-def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
+def add_spots(pardict, resol=10, simultr=None, models='phoenix', \
+            noscatter=False):
     '''
     Parameters
     ----------
@@ -411,7 +412,8 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix'):
                             /(3.*np.pi))**(1./3.)
         # White noise
         uncph = yobs_err[i]*len(tt)**0.5/2.
-        transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
+        if noscatter == False:
+            transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
         yerr = np.zeros(len(transit)) + uncph
 
         #plt.close('all')
