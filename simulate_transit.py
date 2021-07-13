@@ -412,7 +412,7 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix', \
                             /(3.*np.pi))**(1./3.)
         # White noise
         uncph = yobs_err[i]*len(tt)**0.5/2.
-        if noscatter == False:
+        if not noscatter:
             transit *= np.random.normal(loc=1., scale=uncph, size=len(tt))
         yerr = np.zeros(len(transit)) + uncph
 

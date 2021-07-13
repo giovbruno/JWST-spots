@@ -12,14 +12,13 @@ sys.path.append('../KSint_wrapper/SRC/')
 import ksint_wrapper_fitcontrast
 import get_uncertainties
 import lmfit
-import dynesty
 from dynesty import plotting as dyplot
 from dynesty import utils as dyfunc
-from dynesty import DynamicNestedSampler
+from dynesty import NestedSampler
 from pdb import set_trace
 plt.ioff()
 
-def transit_spectro(pardict, resol=10, model='KSint'):
+def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False):
     '''
     Launches on all spectral bands
     '''
@@ -31,7 +30,9 @@ def transit_spectro(pardict, resol=10, model='KSint'):
     ldd = open(pardict['project_folder'] \
             + pardict['instrument'] + '/star_' + str(int(pardict['tstar'])) \
                         + 'K/' + 'LDcoeffs_' + ldendname + '.pic', 'rb')
-    xobs = pickle.load(ldd)[1][0]
+    ldd_ = pickle.load(ldd)
+    xobs = ldd_[1][0]
+    ldlist = ldd_[0]
     ldd.close()
     flag = xobs < 6
     expchan = len(xobs[flag])
@@ -43,22 +44,23 @@ def transit_spectro(pardict, resol=10, model='KSint'):
     ymoderr = spec[2]
     #bestbin = ymoderr.argmin()
     bestbin = -1
-    transit_emcee(pardict, bestbin, bestbin, model=model)
+    #   transit_emcee(pardict, bestbin, bestbin, ldlist, model=model)
 
     for i in np.arange(expchan - 1):
         if i != bestbin:
-            transit_emcee(pardict, int(i), bestbin, model=model)
+            transit_emcee(pardict, int(i), bestbin, ldlist, model=model, \
+                    tight_ld_prior=tight_ld_prior)
 
     return
 
-def transit_emcee(diz, ind, bestbin, model='KSint', resume=False, nested=True):
+def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
+            resume=False, nested=True, tight_ld_prior=True):
 
-    if resume and os.path.exists(diz['chains_folder'] \
-                    + '/chains_' + str(model) + '_' + str(ind) + '.pic'):
+    if resume and os.path.exists(diz['chains_folder'] + 'transit_' + str(ind) \
+            + '_nested.pic'):
         return
 
     print('Channel', str(ind))
-
     plt.close('all')
     os.system('mkdir ' + diz['chains_folder'])
     lcfile = open(diz['data_folder'] + 'transit_spots_' + str(ind) \
@@ -202,7 +204,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint', resume=False, nested=True):
                 modeltype = 'fixt0'
                 # Extract spot time from first wavelength bin
                 ffopen = open(diz['chains_folder'] + 'chains_' + str(model) \
-                    + '_' + str(bestbin) + '.pickle', 'rb')
+                    + '_' + str(bestbin) + '.pic', 'rb')
                 res = pickle.load(ffopen)
                 perc = res['Percentiles'][0]
                 # These will be fixed in the fit
@@ -343,7 +345,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint', resume=False, nested=True):
             modeltype = 'fixt0'
             nlive = 150
             ffopen = open(diz['chains_folder'] \
-                        + 'transit_-1_nested_spec.pickle', 'rb')
+                        + 'transit_-1_nested.pic', 'rb')
             sresults = pickle.load(ffopen)
             samples = sresults['samples']
             weights = np.exp(sresults.logwt - sresults.logz[-1])
@@ -357,10 +359,10 @@ def transit_emcee(diz, ind, bestbin, model='KSint', resume=False, nested=True):
             fix_dict['t0'] = perc[-1][1]
 
         ndim = len(titles)
-        sampler = dynesty.NestedSampler(lnprob, prior_transform, ndim, \
-                        nlive=nlive, ptform_args=[diz, t], \
-                        logl_args=(t, y, yerr, model, fix_dict, True))
-        sampler.run_nested(print_progress=True)
+        sampler = NestedSampler(lnprob, prior_transform, ndim, \
+            nlive=nlive, ptform_args=[diz, t, ldlist, tight_ld_prior, ind], \
+            logl_args=(t, y, yerr, model, fix_dict, True))
+        sampler.run_nested(print_progress=False)
         sresults = sampler.results
 
         samples = sresults['samples']
@@ -372,7 +374,7 @@ def transit_emcee(diz, ind, bestbin, model='KSint', resume=False, nested=True):
                 + str(ind) + '.pdf', model=model, fix_dict=fix_dict)
         # Save chains
         fout = open(diz['chains_folder'] + 'transit_' + str(ind) \
-                + '_nested_spec.pickle', 'wb')
+                + '_nested.pic', 'wb')
         pickle.dump(sresults, fout)
         fout.close()
 
@@ -388,22 +390,25 @@ def transit_emcee(diz, ind, bestbin, model='KSint', resume=False, nested=True):
             # Plot traces and 1-D marginalized posteriors.
             tfig, taxes = dyplot.traceplot(sresults, labels=titles)
             plt.savefig(diz['chains_folder'] + 'transit_' + str(ind) \
-                    + '_traceplot_nested_spec.pdf')
+                    + '_traceplot_nested.pdf')
             # Plot the 2-D marginalized posteriors.
             label_kwargs = {}
             label_kwargs['fontsize'] = 14
             cfig, caxes = dyplot.cornerplot(sresults, color='b', show_titles=True, \
                     labels=titles, quantiles=[0.159, 0.50, 0.841], title_fmt='.4f')
             plt.savefig(diz['chains_folder'] + 'transit_' + str(ind) \
-                    + '_cornerplot_nested_spec.pdf')
+                    + '_cornerplot_nested.pdf')
             plt.close('all')
 
     return
 
-def prior_transform(u, diz, t):
+def prior_transform(u, diz, t, ldlist, tight_ld_prior, wlind):
     '''
     Transforms the uniform random variable `u ~ Unif[0., 1.)`
     to the parameters of interest.
+
+    tight_ld_prior: Set Gaussian priors on LD coefficients
+    https://dynesty.readthedocs.io/en/latest/quickstart.html?highlight=corner#prior-transforms
     '''
 
     x = np.array(u)
@@ -415,12 +420,19 @@ def prior_transform(u, diz, t):
         #yy = lnp_jeffreys(xx, 0.2, 0.01)
         #zz = stats.rv_discrete(a=xx.min(), b=xx.max(), values=(xx, yy))
         #x[0] = zz.ppf(u[0])
-        x[1] = u[1] # u1
-        x[2] = u[2] # u2
+        if not tight_ld_prior:
+            x[1] = u[1] # u1
+            x[2] = u[2] # u2
+        else:  # Gaussian priors for LD coefficients
+            sig = [0.05]
+            x1 = stats.norm.ppf([u[1]])
+            x[1] = np.dot(sig, x1) + ldlist[wlind][0]
+            x2 = stats.norm.ppf([u[2]])
+            x[2] = np.dot(sig, x1) + ldlist[wlind][1]
         x[3] = -1. + 2.*u[3] # r0
         x[4] = -1. + 2.*u[4] # r1
         x[5] = 10.*u[5] # r2
-        x[6] = u[6] + 1.e-4 # A
+        x[6] = u[6] + 1.e-5 # A
         x[7] = u[7]*6. + 2. # n
         x[8] = u[8]*0.02 + np.diff(t).min() # w
         if int(diz['theta']) == 0:
@@ -438,12 +450,19 @@ def prior_transform(u, diz, t):
         x[11] = u[11]*0.04 + 0.08 # t0
     elif len(u) == 7:
         x[0] = stats.loguniform.ppf(u[0], 0.01, 0.2)    # rp/r*
-        x[1] = u[1]
-        x[2] = u[2]
+        if not tight_ld_prior:
+            x[1] = u[1] # u1
+            x[2] = u[2] # u2
+        else:  # Gaussian priors for LD coefficients
+            sig = [0.05]
+            x1 = stats.norm.ppf([u[1]])
+            x[1] = np.dot(sig, x1) + ldlist[wlind][0]
+            x2 = stats.norm.ppf([u[2]])
+            x[2] = np.dot(sig, x1) + ldlist[wlind][1]
         x[3] = -1. + 2.*u[3]
         x[4] = -1. + 2.*u[4]
         x[5] = 10.*u[5]
-        x[6] = u[6] + 1.e-4
+        x[6] = u[6] + 1.e-6
 
     return x
 
