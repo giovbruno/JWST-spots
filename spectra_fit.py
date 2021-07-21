@@ -6,6 +6,7 @@ from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.interpolate import RegularGridInterpolator as rgi
 from scipy.optimize import least_squares
 from scipy import stats
+from datetime import datetime
 import pysynphot
 import pickle
 from pdb import set_trace
@@ -136,6 +137,8 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 delta, planet_angle = get_spot_size(wspot, nspot, perc[0][1], \
                                 pardict, sresults)
                 pardict['minbeta'] = (delta/planet_angle)**2
+                #if pardict['minbeta'] >= 1.:
+                #    pardict['minbeta'] = 0.
             else:
                 wl.append(spec[0][i])
                 kr.append(perc[0][1])
@@ -322,11 +325,11 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 ispecstar = np.transpose(pardict['starmodel']['spec'])
                 mmu = pardict['starmodel']['mus']
                 f_star = 2.*np.pi*np.trapz(ispecstar*mmu, x=mmu)
-                soln = least_squares(spec_res, p0, bounds=boundsm, \
-                    args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
-                    method='dogbox')
-                print('Least squares minimisation results:')
-                print(soln)
+                #soln = least_squares(spec_res, p0, bounds=boundsm, \
+                #    args=(A, yerrup, yerrdown, wl, zz, pardict, f_star), \
+                #    method='dogbox')
+                #print('Least squares minimisation results:')
+                #print(soln)
                 #bsol = compute_deltaf_f(soln.x, wl, zz, pardict, \
                 #                fstar=f_star)
                 #plt.plot(wl, bsol, label='Best fit')
@@ -379,15 +382,15 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                 fontsize=16)
         else:
             #print('Best sol:', soln.params['Tspot'])
-            plt.title('True value: ' + str(int(pardict['tumbra'])) + ' K' \
-               + r', best fit: $T_\bullet=$' + str(int(soln.x[0])) \
-                + ' K', fontsize=16)
-            plt.savefig(plotname + stmod + '_' + pardict['observatory'] \
-                        + '_LMfit.pdf')
-            fout = open(plotname.replace('plot', 'LMfit') + stmod + '_' \
-                    + pardict['observatory'] + '.pic', 'wb')
-            pickle.dump([soln, np.round(np.degrees(-999.), 2)], fout)
-            fout.close()
+            #plt.title('True value: ' + str(int(pardict['tumbra'])) + ' K' \
+            #   + r', best fit: $T_\bullet=$' + str(int(soln.x[0])) \
+            #    + ' K', fontsize=16)
+            #plt.savefig(plotname + stmod + '_' + pardict['observatory'] \
+            #            + '_LMfit.pdf')
+            #fout = open(plotname.replace('plot', 'LMfit') + stmod + '_' \
+            #        + pardict['observatory'] + '.pic', 'wb')
+            #pickle.dump([soln, np.round(np.degrees(-999.), 2)], fout)
+            #fout.close()
 
             return
 
@@ -562,7 +565,7 @@ def scalespec2(x, spec, y, yerrup, yerrdown):
 
     return res
 
-def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
+def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=True, \
             resume=False):
     '''
     Explore posterior distribution with (static) nested sampling.
@@ -574,7 +577,23 @@ def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
 
     if resume and os.path.exists(pardict['chains_folder'] \
                                                     + '/nested_spec.pic'):
+
+        created = os.stat(pardict['chains_folder'] \
+                                + '/nested_spec.pic').st_ctime
+        dd = datetime.fromtimestamp(created)
+        resfile = open(pardict['chains_folder'] + 'nested_spec.pic', 'rb')
+        resdict = pickle.load(resfile)
+        resfile.close()
+        samples = resdict.samples  # samples
+        weights = np.exp(resdict.logwt - resdict.logz[-1])
+        quantiles = [dyfunc.quantile(samps, [0.0001, 0.50, 0.9999], \
+                    weights=weights) for samps in samples.T][0]
+        if dd > datetime(2021, 7, 13, 12, 0, 0) \
+            and quantiles[0] >= pardict['minbeta']:
             return
+
+    if pardict['minbeta'] >= 1.:
+        pardict['minbeta'] = 0.
 
     print('\nStarting nested sampling\n')
 
@@ -625,7 +644,9 @@ def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
     cfig, caxes = dyplot.cornerplot(sresults, color='b', show_titles=False, \
             #title_quantiles=[0.159, 0.50, 0.841], \
             labels=labels, label_kwargs=label_kwargs, \
-            quantiles=[0.159, 0.50, 0.841], truths=[pardict['tumbra'], None])
+            quantiles=[0.025, 0.50, 0.975], truths=[pardict['tumbra'], \
+                (pardict['rplanet']*0.1028/pardict['rstar'])**2 \
+                / (np.sin(np.radians(pardict['aumbra']))**2)])
     plt.savefig(pardict['chains_folder'] + '/cornerplot_nested_spec.pdf')
 
     # Save chains
@@ -648,7 +669,7 @@ def plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, text):
                                 fmt='ko', mfc='None', capsize=2)
     plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
     plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
-    plt.text(3.5, np.mean(A) + 0.00025,'{}'.format(pardict['tstar']) \
+    plt.text(3.5, np.mean(A) + 0.00025,'{}'.format(int(pardict['tstar'])) \
       + ' K star\n' + pardict['instrument'].replace('/', '').replace('_', ' ') \
       + '\n' + r'$\theta={}^\circ$'.format(int(pardict['theta'])) + '\n' \
       + r'True $T_\bullet=$' + str(int(pardict['tumbra'])) \
@@ -1393,6 +1414,7 @@ def get_spot_size(wspot, nspot, rprs, pardict, dict_chains, transit_model=False)
         half_fwhm = wspot*(np.log(2))**(1./nspot)
         #half_fwhm = wspot*(6.*np.log(10.))**(1./nspot)
         delta = 2.*np.pi*1.5*half_fwhm*aR/per_planet - planet_angle
+        delta = max([delta, 0.])
         max_beta_radius = (np.radians(7.)/(0.5*np.pi))**2/planet_angle**2
         print('Min spot radius: ', np.degrees(delta), ' deg')
         print('Min spot-to-star surface ratio: ', delta**2/(0.5*np.pi)**2)

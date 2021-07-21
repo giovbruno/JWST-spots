@@ -482,7 +482,7 @@ def plot_unc_results(instrument, ip):
 
     return
 
-def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=5):
+def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=1):
     '''
     Ingest all stellar spectra needed for a given simulation (so you only have
     to do it once).
@@ -1215,9 +1215,9 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                         latpart = '_lat' + str(ip['latspot'])
                         theta = 21
                         if ip['tstar'] == 5000:
-                            ip['incl'] = 87.6
+                            ip['incl'] = 88.1
                         else:
-                            ip['incl'] = 88.7
+                            ip['incl'] = 88.75
                     else:
                         latpart = ''
                     tumbra = ip['tstar'] + td
@@ -1234,6 +1234,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                         + '_theta' + str(int(theta)) \
                         + '_mag' + str(mag) + ldpart + '/MCMC/'
                     if not os.path.exists(chains_folder):
+                        print(chains_folder, 'does not exist')
                         continue
                     print(chains_folder, tumbra)
                     ffopen = open(chains_folder + 'transit_-1_nested.pic', 'rb')
@@ -1243,7 +1244,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                     weights = np.exp(sresults.logwt - sresults.logz[-1])
                     perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
                                 weights=weights) for samps in samples.T]
-                    A = perc[-1][1]
+                    A = perc[6][1]
                     data_folder = project_folder + instrument + 'star_' \
                         + str(int(ip['tstar'])) + 'K/p' \
                         + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
@@ -1304,9 +1305,9 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
     mmags = np.array(mmags)
     for j, mm in enumerate(mags):
         for i, tc in enumerate(tcontrast):
-            rand = np.random.uniform(low=-50, high=50)
+            #rand = np.random.uniform(low=-50, high=50)
             flag = np.logical_and(tu - ip['tstar'] == tc, mmags == mm)
-            plt.errorbar(snr[flag] + rand, tdiff[flag], yerr=([yerrd[flag], \
+            plt.errorbar(snr[flag], tdiff[flag], yerr=([yerrd[flag], \
                     yerru[flag]]), fmt='.', color=colour[i], capsize=2)
             if i == 2:
                 plt.scatter([], [], marker=marker[j], \
@@ -1314,20 +1315,19 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                    #colour[i], \
                    label='{}'.format(mm))
             #else:
-            plt.scatter(snr[flag] + rand, tdiff[flag], marker=marker[j], \
+            plt.scatter(snr[flag], tdiff[flag], marker=marker[j], \
                s=20*size, c=colour[i])
 
     for i, tc in enumerate(tcontrast):
         text_kwargs = dict(color=colour[i])
-        #if tcmax < 500:
-        #    jj = 60
-        #else:
-        #    jj = 80
-        plt.text(snr.max()*0.85, 800 - 100*i, r'$T_\bullet=' \
+        try:
+            plt.text(snr.max()*0.85, 800 - 100*i, r'$T_\bullet=' \
             + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
+        except ValueError:
+            set_trace()
     plt.plot([SNRmin - 1000, SNRmax + 1000], [0., 0.], 'k--', \
                 alpha=0.5)
-    plt.xlim(SNRmin - 100, SNRmax + 100)
+    plt.xlim(max([SNRmin - 10, 0]), SNRmax + 5)
     plt.ylim(-1000, 1000)
     #plt.ylim(tcmin - 300, tcmax + 300)
     #plt.text(4., yloc, '--- True value', fontsize=16)
@@ -1374,14 +1374,14 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                         ts = 5000.
                         logg = 4.5
                         if latspot == 21:
-                            incl = 87.6
+                            incl = 88.1#87.6
                     elif star == 'M':
                         rp = 0.25
                         rs = 0.47
                         ts = 3500.
                         logg = 5.0
                         if latspot == 21:
-                            incl = 88.7
+                            incl = 88.75#88.7
                     if latspot == 21.:
                         theta = 21
                     inputpars = {}
@@ -1390,7 +1390,7 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                     inputpars['aumbra'] = spotsize
                     inputpars['latspot'] = latspot
                     cycle(rp, rs, ts, logg, instrum, \
-                        simulate_transits=False, fit_transits=True, \
+                        simulate_transits=False, fit_transits=False, \
                         fit_spectra=True, spotted_starmodel=False, \
                         inputpars=inputpars, update=False, chi2rplot=True, \
                         model='batman', noscatter=noscatter, \
@@ -1411,9 +1411,9 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
     if latspot == 0:
         inputpars['incl'] = 90.
     elif latspot == 21 and tstar == 3500:
-        inputpars['incl'] = 88.7
+        inputpars['incl'] = 88.75#88.7
     elif latspot == 21 and tstar == 5000:
-        inputpars['incl'] = 87.6
+        inputpars['incl'] = 88.1#87.6
     inputpars['theta'] = theta
     inputpars['aumbra'] = float(spotsize)
     inputpars['latspot'] = int(latspot)
@@ -1426,7 +1426,7 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
         rplanet = 0.25
         loggstar = 5.0
     cycle(rplanet, rstar, tstar, loggstar, instrument, \
-            simulate_transits=False, fit_transits=True, \
+            simulate_transits=False, fit_transits=False, \
             fit_spectra=True, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman', \
             tight_ld_prior=True)

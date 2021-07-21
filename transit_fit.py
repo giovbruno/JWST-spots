@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
 from scipy import stats
 import os, sys, pickle
+from datetime import datetime
 import emcee
 from emcee.autocorr import integrated_time
 import batman
@@ -44,7 +45,7 @@ def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False):
     ymoderr = spec[2]
     #bestbin = ymoderr.argmin()
     bestbin = -1
-    #   transit_emcee(pardict, bestbin, bestbin, ldlist, model=model)
+    transit_emcee(pardict, bestbin, bestbin, ldlist, model=model)
 
     for i in np.arange(expchan - 1):
         if i != bestbin:
@@ -54,11 +55,15 @@ def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False):
     return
 
 def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
-            resume=False, nested=True, tight_ld_prior=True):
+            resume=True, nested=True, tight_ld_prior=True):
 
     if resume and os.path.exists(diz['chains_folder'] + 'transit_' + str(ind) \
             + '_nested.pic'):
-        return
+            created = os.stat(diz['chains_folder'] + 'transit_' + \
+                    str(ind) + '_nested.pic').st_ctime
+            dd = datetime.fromtimestamp(created)
+            if dd > datetime(2021, 7, 13, 12, 0, 0):
+                return
 
     print('Channel', str(ind))
     plt.close('all')
@@ -550,7 +555,7 @@ def plot_samples(samples, best_sol, t, y, yerr, wl, plotname, \
     frame2.errorbar(t, (y - best_fit)*1e6, \
             yerr=yerr*1e6, fmt='k.')
 
-    plt.ylim(y.min() - 1e-3, y.max() + 3e-3)
+    plt.ylim(y.min() - 1e-3, y.max() + 1e-3)
     plt.savefig(plotname)
     #plt.show()
     #set_trace()
