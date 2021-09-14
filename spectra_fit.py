@@ -565,7 +565,7 @@ def scalespec2(x, spec, y, yerrup, yerrdown):
 
     return res
 
-def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=True, \
+def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
             resume=False):
     '''
     Explore posterior distribution with (static) nested sampling.
@@ -1439,7 +1439,7 @@ def plot_fitted_spectra(instrument, tstar, mag):
         rp = 0.25
         rs = 0.47
         temp = np.arange(2600, 3500, 300)
-    ffolder = '/home/giovanni/Projects/jwst_spots/revision1/'
+    ffolder = '/home/giovanni/Projects/jwst_spots/revision2/'
     ffiles = ['contrast_spec_fit.pic', 'kr_fit.pic']
 
     for i in temp:

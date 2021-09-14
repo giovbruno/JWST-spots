@@ -197,7 +197,6 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix', \
         #xobs -= 0.5
         flag = xobs < 6.5
         xobs, yobs, yobs_err = xobs[flag], yobs[flag], yobs_err[flag]
-        #yobs = np.zeros(len(xobs)) + 0.01
         #yobs_err /= 2.
         # Rebin from resolution 100 to res
         #xobs = rebin.rebin_wave(xobs_, 70)
@@ -221,6 +220,8 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix', \
     if pardict['spotted_starmodel'] and pardict['instrument'] == 'NIRCam':
         yobs = spotted_transmsp(xobs, yobs, pardictmodels=models)
 
+    if noscatter:
+        yobs = np.zeros(len(xobs)) + np.median(yobs)#0.01
     # Add one point for the band-integrated transit
     weights = 1./yobs_err**2
     yobs = np.concatenate((yobs, [np.average(yobs, weights=weights)]))

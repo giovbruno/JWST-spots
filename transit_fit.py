@@ -49,13 +49,14 @@ def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False):
 
     for i in np.arange(expchan - 1):
         if i != bestbin:
+        #if i == 10:
             transit_emcee(pardict, int(i), bestbin, ldlist, model=model, \
                     tight_ld_prior=tight_ld_prior)
 
     return
 
 def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
-            resume=True, nested=True, tight_ld_prior=True):
+            resume=False, nested=True, tight_ld_prior=True):
 
     if resume and os.path.exists(diz['chains_folder'] + 'transit_' + str(ind) \
             + '_nested.pic'):
@@ -384,7 +385,7 @@ def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
         fout.close()
 
         # Diagnostic plots
-        if ind == -1 or ind == 0:
+        if ind == -1 or ind == 10:
             #try:
             #   rfig, raxes = dyplot.runplot(sresults)
             #except IndexError:

@@ -22,7 +22,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     #pardict = {}
     pardict['homedir'] = os.path.expanduser('~')
     pardict['project_folder'] = pardict['homedir'] \
-                                            + '/Projects/jwst_spots/revision1/'
+                                            + '/Projects/jwst_spots/revision2/'
     #pardict['instrument'] = str(instr) + '/'
     if not os.path.exists(pardict['project_folder'] + pardict['instrument'] + '/'):
         os.mkdir(pardict['project_folder'] + pardict['instrument'] + '/')
@@ -52,7 +52,8 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) + latpart \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + scatterpart + ldpart + mpart + '/'
+            + '_mag' + str(magstar) + scatterpart + ldpart + mpart + '_4/'
+
     if not os.path.exists(pardict['case_folder']):
         if resume:
             return pardict
@@ -121,7 +122,8 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             ymod = np.concatenate((y1, y2))
             yerrmod = np.concatenate((yerr1, yerr2))
             totchan = simulate_transit.add_spots(pardict, resol=res, \
-                simultr=list([wmod, ymod, yerrmod]), models=models)
+                simultr=list([wmod, ymod, yerrmod]), models=models, \
+                noscatter=noscatter)
 
     # Select channels and fit transit + spots
     if 'fit_transits' in operation:
@@ -146,7 +148,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
 def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             simulate_transits=True, fit_transits=True, fit_spectra=True, \
             models='josh', res=10, fittype='grid', \
-            spotted_starmodel=False, inputpars={}, update=False, \
+            spotted_starmodel=False, inputpars={}, update=True, \
             chi2rplot=False, model='KSint', noscatter=False, \
             tight_ld_prior=False, onlyres=False, oldf2f1=False, type_res=4):
     '''
@@ -174,8 +176,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['latspot'] = inputpars['latspot']
 
     if instrum == 'NIRCam':
-        mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [7.5]
+        #mags = [4.5, 6.0, 7.5, 9.0]
+        mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
         #mags = np.array([10.5])
@@ -198,7 +200,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     if update:
         homef = os.path.expanduser('~')
-        checkf = homef + '/Projects/jwst_spots/revision1/' + instrum \
+        checkf = homef + '/Projects/jwst_spots/revision2/' + instrum \
                 + '/star_' + str(int(tstar)) + 'K/accuracy_' + models \
                 + '_a' + str(int(ip['aumbra'])) \
                 + '_theta' + str(int(ip['theta'])) + '.pdf'
@@ -220,11 +222,11 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ## Try only one Tspot
     if tstar == 3500:
     # Very cool models will only be used for the fit
-        tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-300.])
+        #tcontrast = np.arange(-900, 0, 100)
+        tcontrast = np.array([-600.])
     elif tstar == 5000.:
-        tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-300.])
+        #tcontrast = np.arange(-1200, 0, 100)
+        tcontrast = np.array([-900.])
     if not onlyres:
         if len(opers) > 0:
             for mag in mags:
@@ -301,7 +303,7 @@ def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
             for j, td in enumerate(tcontrast): #td
                 tumbra = ip['tstar'] + td
                 homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Projects/jwst_spots/revision1/'
+                project_folder = homedir + '/Projects/jwst_spots/revision2/'
                 instrument = ip['instrument'] + '/'
                 chains_folder = project_folder + instrument + 'star_' \
                     + str(int(ip['tstar'])) + 'K/p' \
@@ -433,7 +435,7 @@ def map_uncertainties(mags, tcontrast, ip):
     unc = []
     for mag in mags:
         homedir = os.path.expanduser('~')
-        project_folder = homedir + '/Projects/jwst_spots/revision1/'
+        project_folder = homedir + '/Projects/jwst_spots/revision2/'
         instrument = ip['instrument'] + '/'
         data_folder = project_folder + instrument + 'star_' \
             + str(int(ip['tstar'])) + 'K/p' \
@@ -464,7 +466,7 @@ def plot_unc_results(instrument, ip):
     tspot = [3500, 5000]
     plt.figure()
     for i, ti in enumerate(tspot):
-        filres = homedir + '/Projects/jwst_spots/revision1/' + instrument \
+        filres = homedir + '/Projects/jwst_spots/revision2/' + instrument \
                 + '/star_' + str(ti) + 'K/uncertainty_array_' \
                 + 'a' + str(int(ip['aumbra'])) \
                 + '_theta' + str(int(ip['theta'])) + '.pic'
@@ -475,7 +477,7 @@ def plot_unc_results(instrument, ip):
     plt.ylabel(r'$\sigma(T_\bullet)$ [K]', fontsize=16)
     plt.title(instrument.replace('_', ' '), fontsize=16)
     plt.show()
-    plt.savefig(homedir + '/Projects/jwst_spots/revision1/' + instrument \
+    plt.savefig(homedir + '/Projects/jwst_spots/revision2/' + instrument \
                 + '/result_uncertainties_' + instrument + '_a' \
                 + str(int(ip['aumbra'])) \
                 + '_theta' + str(int(ip['theta'])) + '.pdf')
@@ -588,7 +590,7 @@ def plot_res2(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
                 i = 0
                 tumbra = ip['tstar'] + td
                 homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Projects/jwst_spots/revision1/'
+                project_folder = homedir + '/Projects/jwst_spots/revision2/'
                 instrument = ip['instrument'] + '/'
                 chains_folder = project_folder + instrument + 'star_' \
                     + str(int(ip['tstar'])) + 'K/p' \
@@ -712,7 +714,7 @@ def plot_size(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
                 i = 0
                 tumbra = ip['tstar'] + td
                 homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Projects/jwst_spots/revision1/'
+                project_folder = homedir + '/Projects/jwst_spots/revision2/'
                 instrument = ip['instrument'] + '/'
                 chains_folder = project_folder + instrument + 'star_' \
                     + str(int(ip['tstar'])) + 'K/p' \
@@ -816,7 +818,7 @@ def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
             diffT = [] # This is for the 2D plot
             tumbra = ip['tstar'] + td
             homedir = os.path.expanduser('~')
-            project_folder = homedir + '/Projects/jwst_spots/revision1/'
+            project_folder = homedir + '/Projects/jwst_spots/revision2/'
             instrument = ip['instrument'] + '/'
             chains_folder = project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/p' \
@@ -910,7 +912,7 @@ def plot_res4(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
             diffT = [] # This is for the 2D plot
             tumbra = ip['tstar'] + td
             homedir = os.path.expanduser('~')
-            project_folder = homedir + '/Projects/jwst_spots/revision1/'
+            project_folder = homedir + '/Projects/jwst_spots/revision2/'
             instrument = ip['instrument'] + '/'
             chains_folder = project_folder + instrument + 'star_' \
                 + str(int(ip['tstar'])) + 'K/p' \
@@ -1009,7 +1011,7 @@ def plot_res5(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                     latpart = ''
                 tumbra = ip['tstar'] + td
                 homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Projects/jwst_spots/revision1/'
+                project_folder = homedir + '/Projects/jwst_spots/revision2/'
                 instrument = ip['instrument'] + '/'
                 chains_folder = project_folder + instrument + 'star_' \
                     + str(int(ip['tstar'])) + 'K/p' \
@@ -1113,7 +1115,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
                     latpart = ''
                 tumbra = ip['tstar'] + td
                 homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Projects/jwst_spots/revision1/'
+                project_folder = homedir + '/Projects/jwst_spots/revision2/'
                 chains_folder = project_folder + instrument + 'star_' \
                     + str(int(ip['tstar'])) + 'K/p' \
                     + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
@@ -1222,7 +1224,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                         latpart = ''
                     tumbra = ip['tstar'] + td
                     homedir = os.path.expanduser('~')
-                    project_folder = homedir + '/Projects/jwst_spots/revision1/'
+                    project_folder = homedir + '/Projects/jwst_spots/revision2/'
                     instrument = ip['instrument'] + '/'
                     chains_folder = project_folder + instrument + 'star_' \
                         + str(int(ip['tstar'])) + 'K/p' \
@@ -1390,7 +1392,7 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                     inputpars['aumbra'] = spotsize
                     inputpars['latspot'] = latspot
                     cycle(rp, rs, ts, logg, instrum, \
-                        simulate_transits=False, fit_transits=False, \
+                        simulate_transits=True, fit_transits=True, \
                         fit_spectra=True, spotted_starmodel=False, \
                         inputpars=inputpars, update=False, chi2rplot=True, \
                         model='batman', noscatter=noscatter, \
@@ -1402,7 +1404,7 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
 def main(tstar, instrument, theta, spotsize, latspot, outfile):
 
     sys.stdout \
-        = open('/home/giovanni/Projects/jwst_spots/revision1/logs/' \
+        = open('/home/giovanni/Projects/jwst_spots/revision2/logs/' \
             + outfile, 'wt')
     tstar = int(tstar)
     theta = int(theta)
@@ -1426,10 +1428,10 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
         rplanet = 0.25
         loggstar = 5.0
     cycle(rplanet, rstar, tstar, loggstar, instrument, \
-            simulate_transits=False, fit_transits=False, \
-            fit_spectra=True, spotted_starmodel=False, \
+            simulate_transits=False, fit_transits=True, \
+            fit_spectra=False, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman', \
-            tight_ld_prior=True)
+            tight_ld_prior=True, noscatter=True)
 
     return
 
