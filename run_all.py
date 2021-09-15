@@ -217,7 +217,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         if models == 'josh':
             muval = np.cos(np.radians(ip['theta']))
             ip['muindex'] = abs(ip['starmodel']['mus'] - muval).argmin()
-    
+
     ## Try only one Tspot
     if tstar == 3500:
     # Very cool models will only be used for the fit
@@ -1133,10 +1133,10 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
                 # Quantiles
                 samples = resdict.samples  # samples
                 weights = np.exp(resdict.logwt - resdict.logz[-1])  # normalized weights
-                quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
-                            weights=weights) for samps in samples.T]
-                #quantiles = [dyfunc.quantile(samps, [0.05, 0.50, 0.95], \
+                #quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
                 #            weights=weights) for samps in samples.T]
+                quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
+                            weights=weights) for samps in samples.T]
 
                 yerrup = np.diff(quantiles[0])[1]
                 yerrdown = np.diff(quantiles[0])[0]
@@ -1190,183 +1190,209 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
         noscatter=False):
 
     #aumbras = np.arange(2, 6)
-    aumbras = [3.]
-    if ip['tstar'] == 5000:
-        #tcontrast = [-600.]
-        tcontrast = np.arange(-1200, -100, 300)
-    elif ip['tstar'] == 3500.:
-        tcontrast = np.arange(-900, -100, 300)
-        #tcontrast = [-300.]
-    if tight_ld_prior:
-        ldpart = '_tightLD'
-    else:
-        ldpart = ''
-    if noscatter:
-        scatterpart = '_noscatter'
-    else:
-        scatterpart = ''
+    plothistos = [True, False]
+    for plothisto in plothistos:
+        aumbras = [3.]
+        if ip['tstar'] == 5000:
+            #tcontrast = [-600.]
+            tcontrast = np.arange(-1200, -100, 300)
+        elif ip['tstar'] == 3500.:
+            tcontrast = np.arange(-900, -100, 300)
+            #tcontrast = [-300.]
+        if tight_ld_prior:
+            ldpart = '_tightLD'
+        else:
+            ldpart = ''
+        if noscatter:
+            scatterpart = '_noscatter'
+        else:
+            scatterpart = ''
 
-    marker = ['o', '*', '^', 's', 'x']
-    colour = ['g', 'r', 'b', 'orange']#, 'brown']
-    SNRmin = np.inf
-    SNRmax = -np.inf
-    tcmax = -np.inf
-    tcmin = np.inf
-    snr, tdiff, tu, yerru, yerrd, mmags = [], [], [], [], [], []
-    for i, size in enumerate(aumbras):
-        sizes = []
-        for k, mag in enumerate(mags):
-            for m, theta in enumerate([ip['theta']]):
-                for j, td in enumerate(tcontrast):
-                    if ip['latspot'] == 21:
-                        latpart = '_lat' + str(ip['latspot'])
-                        theta = 21
-                        if ip['tstar'] == 5000:
-                            ip['incl'] = 88.1
+        marker = ['o', '*', '^', 's', 'x']
+        colour = ['g', 'r', 'b', 'orange']#, 'brown']
+        SNRmin = np.inf
+        SNRmax = -np.inf
+        tcmax = -np.inf
+        tcmin = np.inf
+        snr, tdiff, tu, yerru, yerrd, mmags = [], [], [], [], [], []
+        for i, size in enumerate(aumbras):
+            sizes = []
+            for k, mag in enumerate(mags):
+                for m, theta in enumerate([ip['theta']]):
+                    for j, td in enumerate(tcontrast):
+                        if ip['latspot'] == 21:
+                            latpart = '_lat' + str(ip['latspot'])
+                            theta = 21
+                            if ip['tstar'] == 5000:
+                                ip['incl'] = 88.1
+                            else:
+                                ip['incl'] = 88.75
                         else:
-                            ip['incl'] = 88.75
-                    else:
-                        latpart = ''
-                    tumbra = ip['tstar'] + td
-                    homedir = os.path.expanduser('~')
-                    project_folder = homedir + '/Projects/jwst_spots/revision2/'
-                    instrument = ip['instrument'] + '/'
-                    chains_folder = project_folder + instrument + 'star_' \
-                        + str(int(ip['tstar'])) + 'K/p' \
-                        + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
-                        + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
-                        + '_spot' + str(int(ip['tstar'] + td)) \
-                        + '_i' + str(int(ip['incl'])) \
-                        + '_a' + str(int(size)) + latpart \
-                        + '_theta' + str(int(theta)) \
-                        + '_mag' + str(mag) + scatterpart + ldpart + '/MCMC/'
-                    if not os.path.exists(chains_folder):
-                        print(chains_folder, 'does not exist')
-                        continue
-                    print(chains_folder, tumbra)
-                    ffopen = open(chains_folder + 'transit_-1_nested.pic', 'rb')
-                    sresults = pickle.load(ffopen)
-                    ffopen.close()
-                    samples = sresults['samples']
-                    weights = np.exp(sresults.logwt - sresults.logz[-1])
-                    perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
-                                weights=weights) for samps in samples.T]
-                    A = perc[6][1]
-                    data_folder = project_folder + instrument + 'star_' \
-                        + str(int(ip['tstar'])) + 'K/p' \
-                        + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
-                        + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
-                        + '_spot' + str(int(ip['tstar'] + td)) \
-                        + '_i' + str(int(ip['incl'])) \
-                        + '_a' + str(int(size)) + latpart \
-                        + '_theta' + str(int(theta)) \
-                        + '_mag' + str(mag) + scatterpart + ldpart \
-                                    + '/simulated_data/'
-                    lcfile = open(data_folder + 'transit_spots_-1.pic', 'rb')
-                    lc = pickle.load(lcfile)
-                    lcfile.close()
-                    t, y, yerr, wl = lc
-                    SNR = A/np.mean(yerr)
-                    #resfile = open(chains_folder + 'chains_spec.pic', 'rb')
-                    resfile = open(chains_folder + 'nested_spec.pic', 'rb')
-                    resdict = pickle.load(resfile)
-                    resfile.close()
+                            latpart = ''
+                        tumbra = ip['tstar'] + td
+                        homedir = os.path.expanduser('~')
+                        project_folder = homedir + '/Projects/jwst_spots/revision2/'
+                        instrument = ip['instrument'] + '/'
+                        chains_folder = project_folder + instrument + 'star_' \
+                            + str(int(ip['tstar'])) + 'K/p' \
+                            + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
+                            + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
+                            + '_spot' + str(int(ip['tstar'] + td)) \
+                            + '_i' + str(int(ip['incl'])) \
+                            + '_a' + str(int(size)) + latpart \
+                            + '_theta' + str(int(theta)) \
+                            + '_mag' + str(mag) + scatterpart + ldpart + '/MCMC/'
+                        if not os.path.exists(chains_folder):
+                            print(chains_folder, 'does not exist')
+                            continue
+                        print(chains_folder, tumbra)
+                        ffopen = open(chains_folder + 'transit_-1_nested.pic', 'rb')
+                        sresults = pickle.load(ffopen)
+                        ffopen.close()
+                        samples = sresults['samples']
+                        weights = np.exp(sresults.logwt - sresults.logz[-1])
+                        perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                                    weights=weights) for samps in samples.T]
+                        A = perc[6][1]
+                        data_folder = project_folder + instrument + 'star_' \
+                            + str(int(ip['tstar'])) + 'K/p' \
+                            + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
+                            + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
+                            + '_spot' + str(int(ip['tstar'] + td)) \
+                            + '_i' + str(int(ip['incl'])) \
+                            + '_a' + str(int(size)) + latpart \
+                            + '_theta' + str(int(theta)) \
+                            + '_mag' + str(mag) + scatterpart + ldpart \
+                                        + '/simulated_data/'
+                        lcfile = open(data_folder + 'transit_spots_-1.pic', 'rb')
+                        lc = pickle.load(lcfile)
+                        lcfile.close()
+                        t, y, yerr, wl = lc
+                        SNR = A/np.mean(yerr)
+                        #resfile = open(chains_folder + 'chains_spec.pic', 'rb')
+                        resfile = open(chains_folder + 'nested_spec.pic', 'rb')
+                        resdict = pickle.load(resfile)
+                        resfile.close()
 
-                    # Quantiles
-                    samples = resdict.samples  # samples
-                    weights = np.exp(resdict.logwt - resdict.logz[-1])  #    normalized     weights
-                    #quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
-                    #            weights=weights) for samps in samples.T]
-                    #quantiles = [dyfunc.quantile(samps, [0.05, 0.50, 0.95], \
-                    #            weights=weights) for samps in samples.T]
-                    quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
-                                weights=weights) for samps in samples.T]
-                    yerrup = np.diff(quantiles[0])[1]
-                    yerrdown = np.diff(quantiles[0])[0]
-                    toutput = quantiles[0][1]
+                        # Quantiles
+                        samples = resdict.samples  # samples
+                        weights = np.exp(resdict.logwt - resdict.logz[-1])  #        normalized     weights
+                        #quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                        #            weights=weights) for samps in samples.T]
+                        #quantiles = [dyfunc.quantile(samps, [0.05, 0.50, 0.95], \
+                        #            weights=weights) for samps in samples.T]
+                        quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
+                                    weights=weights) for samps in samples.T]
+                        yerrup = np.diff(quantiles[0])[1]
+                        yerrdown = np.diff(quantiles[0])[0]
+                        toutput = quantiles[0][1]
 
-                    if instrument == 'NIRSpec_Prism/':
-                        errup = np.sqrt(yerrup**2)# + 79.**2)
-                        errdown = np.sqrt(yerrdown**2)# + 79.**2)
-                    elif instrument == 'NIRCam/':
-                        errup = np.sqrt(yerrup**2)# + 62.**2)
-                        errdown = np.sqrt(yerrdown**2)# + 62.**2)
-                    if SNR < SNRmin:
-                        SNRmin = SNR
-                    if SNR > SNRmax:
-                        SNRmax = SNR
-                    if toutput - tumbra < tcmin:
-                        tcmin = toutput - tumbra
-                    if toutput - tumbra > tcmax:
-                        tcmax = toutput - tumbra
+                        if instrument == 'NIRSpec_Prism/':
+                            errup = np.sqrt(yerrup**2)# + 79.**2)
+                            errdown = np.sqrt(yerrdown**2)# + 79.**2)
+                        elif instrument == 'NIRCam/':
+                            errup = np.sqrt(yerrup**2)# + 62.**2)
+                            errdown = np.sqrt(yerrdown**2)# + 62.**2)
+                        if SNR < SNRmin:
+                            SNRmin = SNR
+                        if SNR > SNRmax:
+                            SNRmax = SNR
+                        if toutput - tumbra < tcmin:
+                            tcmin = toutput - tumbra
+                        if toutput - tumbra > tcmax:
+                            tcmax = toutput - tumbra
 
-                    # Resample weighted samples.
-                    samples_equal = dyfunc.resample_equal(samples, weights)
-                    #plt.hist(samples_equal[:, 0] - (ip['tstar'] + td), \
-                    #        orientation='horizontal', bottom=SNR*100, alpha=0.7, \
-                    #        density=False, bins=50)
-                    snr.append(SNR)
-                    tdiff.append(toutput - tumbra)
-                    tu.append(tumbra)
-                    yerru.append(yerrup)
-                    yerrd.append(yerrdown)
-                    mmags.append(mag)
+                        # Resample weighted samples.
+                        samples_equal = dyfunc.resample_equal(samples, weights)
+                        if plothisto:
+                            n, bins, _ = \
+                             plt.hist(samples_equal[:, 0] - (ip['tstar'] + td), \
+                             orientation='horizontal', bottom=SNR*100, \
+                             alpha=0.7, density=False, bins=20, \
+                             color=colour[j], histtype='step')
+                            plt.plot([SNR*100, SNR*100], [bins.min() - 20, \
+                                    bins.max() + 20], c=colour[j])
+                        snr.append(SNR)
+                        tdiff.append(toutput - tumbra)
+                        tu.append(tumbra)
+                        yerru.append(yerrup)
+                        yerrd.append(yerrdown)
+                        mmags.append(mag)
 
-    snr = np.array(snr)
-    tdiff = np.array(tdiff)
-    tu = np.array(tu)
-    yerru = np.array(yerru)
-    yerrd = np.array(yerrd)
-    mmags = np.array(mmags)
-    for j, mm in enumerate(mags):
+        snr = np.array(snr)
+        tdiff = np.array(tdiff)
+        tu = np.array(tu)
+        yerru = np.array(yerru)
+        yerrd = np.array(yerrd)
+        mmags = np.array(mmags)
+        for j, mm in enumerate(mags):
+            for i, tc in enumerate(tcontrast):
+                #rand = np.random.uniform(low=-50, high=50)
+                flag = np.logical_and(tu - ip['tstar'] == tc, mmags == mm)
+                if not plothisto:
+                    plt.errorbar(snr[flag], tdiff[flag], yerr=([yerrd[flag], \
+                        yerru[flag]]), fmt='.', color=colour[i], capsize=2)
+                    plt.scatter(snr[flag], tdiff[flag], marker=marker[j], \
+                       s=20*size, c=colour[i])
+                if i == 2:
+                    plt.scatter([], [], marker=marker[j], \
+                       s=100., c='k', \
+                       #colour[i], \
+                       label='{}'.format(mm))
+
         for i, tc in enumerate(tcontrast):
-            #rand = np.random.uniform(low=-50, high=50)
-            flag = np.logical_and(tu - ip['tstar'] == tc, mmags == mm)
-            plt.errorbar(snr[flag], tdiff[flag], yerr=([yerrd[flag], \
-                    yerru[flag]]), fmt='.', color=colour[i], capsize=2)
-            #set_trace()
-            if i == 2:
-                plt.scatter([], [], marker=marker[j], \
-                   s=100., c='k', \
-                   #colour[i], \
-                   label='{}'.format(mm))
-            #else:
-            plt.scatter(snr[flag], tdiff[flag], marker=marker[j], \
-               s=20*size, c=colour[i])
+            # Stellar Teff
+            if not plothisto:
+                plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], \
+                    [-tc - 100, -tc - 100], alpha=0.5, color=colour[i])
+            else:
+                plt.plot([100, SNRmax*100 + 500], \
+                    [-tc - 100, -tc - 100], alpha=0.5, color=colour[i])
+            text_kwargs = dict(color=colour[i])
+            if not plothisto:
+                plt.text(snr.max()*0.8, -500 - 100*i, r'$T_\bullet=' \
+              + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
+            else:
+                plt.text(snr.max()*80., -500 - 100*i, r'$T_\bullet=' \
+            + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
 
-    for i, tc in enumerate(tcontrast):
-        # Stellar Teff
-        plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], [-tc - 100, -tc - 100], \
-                alpha=0.5, color=colour[i])
-        text_kwargs = dict(color=colour[i])
-        #try:
-        #    plt.text(snr.max()*0.8, -500 - 100*i, r'$T_\bullet=' \
-        #    + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
-        #except ValueError:
-        #    set_trace()
-
-    plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], [0., 0.], 'k--')
-    #plt.xlim(max([SNRmin - 10, 0]), SNRmax + 5)
-    #plt.ylim(-1000, 1000)
-    #plt.ylim(tcmin - 300, tcmax + 300)
-    #plt.text(4., yloc, '--- True value', fontsize=16)
-    plt.xlabel('Occultation SNR', fontsize=16)
-    plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K] $(3\sigma)$', \
-                fontsize=16)
-    if abs(tcmin) > abs(tcmax):
-        ll = 'lower right'
-    else:
-        ll = 'upper left'
-    #plt.legend(title='K mag', title_fontsize=12, frameon=False, loc='lower left')
-    plt.title('{}'.format(int(ip['tstar'])) + ' K star, ' \
-                + instrument.replace('/', '').replace('_', ' ') \
-                + r', $\theta={}^\circ$'.format(int(ip['theta'])), fontsize=16)
-    plt.tight_layout()
-    plt.savefig(project_folder + instrument + 'star_' \
-        + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-        + '_' + str(int(ip['tstar'])) + 'SNRvar_theta' + str(int(ip['theta'])) \
-        + '_Tscatter.pdf')
-    plt.close('all')
+        if not plothisto:
+            plt.plot([0, SNRmax + 5], [0., 0.], 'k--')
+            plt.xlim(0, SNRmax + 5)
+        else:
+            plt.plot([100, SNRmax*100 + 500], [0., 0.], 'k--')
+            plt.xlim(100, SNRmax*100 + 500)
+        plt.ylim(-1000, 1000)
+        if not plothisto:
+            plt.xlabel('Occultation SNR', fontsize=16)
+            plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K] $(3\sigma)$', \
+                        fontsize=16)
+        else:
+            plt.xlabel(r'Occultation SNR$\times 100$', fontsize=16)
+            plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K]', \
+                    fontsize=16)
+        if abs(tcmin) > abs(tcmax):
+            ll = 'lower right'
+        else:
+            ll = 'upper left'
+        if not plothisto:
+            plt.legend(title='K mag', title_fontsize=12, frameon=False, \
+                    loc='lower left')
+        plt.title('{}'.format(int(ip['tstar'])) + ' K star, ' \
+                    + instrument.replace('/', '').replace('_', ' ') \
+                    + r', $\theta={}^\circ$'.format(int(ip['theta'])), fontsize=16)
+        plt.tight_layout()
+        if not plothisto:
+            plt.savefig(project_folder + instrument + 'star_' \
+            + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
+            + '_' + str(int(ip['tstar'])) + 'SNRvar_theta' + str(int(ip['theta'])) \
+            + '_Tscatter.pdf')
+        else:
+            plt.savefig(project_folder + instrument + 'star_' \
+            + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
+            + '_' + str(int(ip['tstar'])) + 'SNRvar_theta' + str(int(ip['theta'])) \
+            + '_Tscatter_histo.pdf')
+        plt.close('all')
 
     return
 
