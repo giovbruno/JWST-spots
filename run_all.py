@@ -205,7 +205,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 + '_theta' + str(int(ip['theta'])) + '.pdf'
         if os.path.isfile(checkf):
             return
-    '''
+
     if not onlyres:
         dict_starmodel, dict_spotmodels \
                         = ingest_stellarspectra(tstar, tcontrast, loggstar)
@@ -217,7 +217,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         if models == 'josh':
             muval = np.cos(np.radians(ip['theta']))
             ip['muindex'] = abs(ip['starmodel']['mus'] - muval).argmin()
-    '''
+    
     ## Try only one Tspot
     if tstar == 3500:
     # Very cool models will only be used for the fit
@@ -1299,6 +1299,12 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         tcmin = toutput - tumbra
                     if toutput - tumbra > tcmax:
                         tcmax = toutput - tumbra
+
+                    # Resample weighted samples.
+                    samples_equal = dyfunc.resample_equal(samples, weights)
+                    #plt.hist(samples_equal[:, 0] - (ip['tstar'] + td), \
+                    #        orientation='horizontal', bottom=SNR*100, alpha=0.7, \
+                    #        density=False, bins=50)
                     snr.append(SNR)
                     tdiff.append(toutput - tumbra)
                     tu.append(tumbra)
@@ -1333,15 +1339,15 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
         plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], [-tc - 100, -tc - 100], \
                 alpha=0.5, color=colour[i])
         text_kwargs = dict(color=colour[i])
-        try:
-            plt.text(snr.max()*0.8, -500 - 100*i, r'$T_\bullet=' \
-            + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
-        except ValueError:
-            set_trace()
+        #try:
+        #    plt.text(snr.max()*0.8, -500 - 100*i, r'$T_\bullet=' \
+        #    + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
+        #except ValueError:
+        #    set_trace()
 
     plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], [0., 0.], 'k--')
-    plt.xlim(max([SNRmin - 10, 0]), SNRmax + 5)
-    plt.ylim(-1000, 1000)
+    #plt.xlim(max([SNRmin - 10, 0]), SNRmax + 5)
+    #plt.ylim(-1000, 1000)
     #plt.ylim(tcmin - 300, tcmax + 300)
     #plt.text(4., yloc, '--- True value', fontsize=16)
     plt.xlabel('Occultation SNR', fontsize=16)
@@ -1351,7 +1357,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
         ll = 'lower right'
     else:
         ll = 'upper left'
-    plt.legend(title='K mag', title_fontsize=12, frameon=False, loc='lower left')
+    #plt.legend(title='K mag', title_fontsize=12, frameon=False, loc='lower left')
     plt.title('{}'.format(int(ip['tstar'])) + ' K star, ' \
                 + instrument.replace('/', '').replace('_', ' ') \
                 + r', $\theta={}^\circ$'.format(int(ip['theta'])), fontsize=16)
