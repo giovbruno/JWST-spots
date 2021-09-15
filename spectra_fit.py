@@ -605,7 +605,7 @@ def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
         #sampler = DynamicNestedSampler(lnprob, prior_transform, ndim, \
         #    bound='single', nlive=100, logl_args=(A, yerrup, yerrdown, wl, zz, \
         #    pardict, fstar), ptform_args=[pardict])
-        sampler.run_nested(print_progress=True)
+        sampler.run_nested(print_progress=False)
         sresults = sampler.results
     else:
         sresults = pickle.load(open(pardict['chains_folder'] \

@@ -438,7 +438,7 @@ def prior_transform(u, diz, t, ldlist, tight_ld_prior, wlind):
         x[3] = -1. + 2.*u[3] # r0
         x[4] = -1. + 2.*u[4] # r1
         x[5] = 10.*u[5] # r2
-        x[6] = u[6] + 1.e-5 # A
+        x[6] = 0.1*u[6] + 1.e-5 # A
         x[7] = u[7]*6. + 2. # n
         x[8] = u[8]*0.02 + np.diff(t).min() # w
         if int(diz['theta']) == 0:

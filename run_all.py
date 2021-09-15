@@ -52,8 +52,7 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) + latpart \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + scatterpart + ldpart + mpart + '_4/'
-
+            + '_mag' + str(magstar) + scatterpart + ldpart + mpart + '/'
     if not os.path.exists(pardict['case_folder']):
         if resume:
             return pardict
@@ -150,7 +149,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             models='josh', res=10, fittype='grid', \
             spotted_starmodel=False, inputpars={}, update=True, \
             chi2rplot=False, model='KSint', noscatter=False, \
-            tight_ld_prior=False, onlyres=False, oldf2f1=False, type_res=4):
+            tight_ld_prior=False, onlyres=False, oldf2f1=False, type_res=7):
     '''
     Run simulations for several scenarios.
 
@@ -176,8 +175,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ip['latspot'] = inputpars['latspot']
 
     if instrum == 'NIRCam':
-        #mags = [4.5, 6.0, 7.5, 9.0]
-        mags = [4.5]
+        mags = [4.5, 6.0, 7.5, 9.0]
+        #mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
         #mags = np.array([10.5])
@@ -206,7 +205,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                 + '_theta' + str(int(ip['theta'])) + '.pdf'
         if os.path.isfile(checkf):
             return
-
+    '''
     if not onlyres:
         dict_starmodel, dict_spotmodels \
                         = ingest_stellarspectra(tstar, tcontrast, loggstar)
@@ -218,15 +217,15 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         if models == 'josh':
             muval = np.cos(np.radians(ip['theta']))
             ip['muindex'] = abs(ip['starmodel']['mus'] - muval).argmin()
-
+    '''
     ## Try only one Tspot
     if tstar == 3500:
     # Very cool models will only be used for the fit
-        #tcontrast = np.arange(-900, 0, 100)
-        tcontrast = np.array([-600.])
+        tcontrast = np.arange(-900, 0, 100)
+        #tcontrast = np.array([-600.])
     elif tstar == 5000.:
-        #tcontrast = np.arange(-1200, 0, 100)
-        tcontrast = np.array([-900.])
+        tcontrast = np.arange(-1200, 0, 100)
+        #tcontrast = np.array([-900.])
     if not onlyres:
         if len(opers) > 0:
             for mag in mags:
@@ -245,7 +244,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     elif type_res == 6:
         plot_res6(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
     elif type_res == 7:
-        plot_res7(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
+        plot_res7(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior, \
+        noscatter=noscatter)
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res3(ip, mags, tcontrast, models)
@@ -1186,7 +1186,8 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
 
     return
 
-def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
+def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
+        noscatter=False):
 
     #aumbras = np.arange(2, 6)
     aumbras = [3.]
@@ -1200,6 +1201,10 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
         ldpart = '_tightLD'
     else:
         ldpart = ''
+    if noscatter:
+        scatterpart = '_noscatter'
+    else:
+        scatterpart = ''
 
     marker = ['o', '*', '^', 's', 'x']
     colour = ['g', 'r', 'b', 'orange']#, 'brown']
@@ -1234,7 +1239,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                         + '_i' + str(int(ip['incl'])) \
                         + '_a' + str(int(size)) + latpart \
                         + '_theta' + str(int(theta)) \
-                        + '_mag' + str(mag) + ldpart + '/MCMC/'
+                        + '_mag' + str(mag) + scatterpart + ldpart + '/MCMC/'
                     if not os.path.exists(chains_folder):
                         print(chains_folder, 'does not exist')
                         continue
@@ -1255,7 +1260,8 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                         + '_i' + str(int(ip['incl'])) \
                         + '_a' + str(int(size)) + latpart \
                         + '_theta' + str(int(theta)) \
-                        + '_mag' + str(mag) + ldpart + '/simulated_data/'
+                        + '_mag' + str(mag) + scatterpart + ldpart \
+                                    + '/simulated_data/'
                     lcfile = open(data_folder + 'transit_spots_-1.pic', 'rb')
                     lc = pickle.load(lcfile)
                     lcfile.close()
@@ -1269,11 +1275,12 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                     # Quantiles
                     samples = resdict.samples  # samples
                     weights = np.exp(resdict.logwt - resdict.logz[-1])  #    normalized     weights
-                    quantiles = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
-                                weights=weights) for samps in samples.T]
+                    #quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                    #            weights=weights) for samps in samples.T]
                     #quantiles = [dyfunc.quantile(samps, [0.05, 0.50, 0.95], \
                     #            weights=weights) for samps in samples.T]
-
+                    quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
+                                weights=weights) for samps in samples.T]
                     yerrup = np.diff(quantiles[0])[1]
                     yerrdown = np.diff(quantiles[0])[0]
                     toutput = quantiles[0][1]
@@ -1311,6 +1318,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
             flag = np.logical_and(tu - ip['tstar'] == tc, mmags == mm)
             plt.errorbar(snr[flag], tdiff[flag], yerr=([yerrd[flag], \
                     yerru[flag]]), fmt='.', color=colour[i], capsize=2)
+            #set_trace()
             if i == 2:
                 plt.scatter([], [], marker=marker[j], \
                    s=100., c='k', \
@@ -1321,25 +1329,29 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
                s=20*size, c=colour[i])
 
     for i, tc in enumerate(tcontrast):
+        # Stellar Teff
+        plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], [-tc - 100, -tc - 100], \
+                alpha=0.5, color=colour[i])
         text_kwargs = dict(color=colour[i])
         try:
-            plt.text(snr.max()*0.85, 800 - 100*i, r'$T_\bullet=' \
+            plt.text(snr.max()*0.8, -500 - 100*i, r'$T_\bullet=' \
             + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
         except ValueError:
             set_trace()
-    plt.plot([SNRmin - 1000, SNRmax + 1000], [0., 0.], 'k--', \
-                alpha=0.5)
+
+    plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], [0., 0.], 'k--')
     plt.xlim(max([SNRmin - 10, 0]), SNRmax + 5)
     plt.ylim(-1000, 1000)
     #plt.ylim(tcmin - 300, tcmax + 300)
     #plt.text(4., yloc, '--- True value', fontsize=16)
     plt.xlabel('Occultation SNR', fontsize=16)
-    plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K]', fontsize=16)
+    plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K] $(3\sigma)$', \
+                fontsize=16)
     if abs(tcmin) > abs(tcmax):
         ll = 'lower right'
     else:
         ll = 'upper left'
-    plt.legend(title='K mag', title_fontsize=12, frameon=False, loc='upper left')
+    plt.legend(title='K mag', title_fontsize=12, frameon=False, loc='lower left')
     plt.title('{}'.format(int(ip['tstar'])) + ' K star, ' \
                 + instrument.replace('/', '').replace('_', ' ') \
                 + r', $\theta={}^\circ$'.format(int(ip['theta'])), fontsize=16)
@@ -1354,7 +1366,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
 
 
 def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
-        tight_ld_prior=True, onlyres=False, oldf2f1=False, typeres=4):
+        tight_ld_prior=True, onlyres=False, oldf2f1=False, typeres=7):
     '''
     Parameters
     ----------
@@ -1392,8 +1404,8 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                     inputpars['aumbra'] = spotsize
                     inputpars['latspot'] = latspot
                     cycle(rp, rs, ts, logg, instrum, \
-                        simulate_transits=True, fit_transits=True, \
-                        fit_spectra=True, spotted_starmodel=False, \
+                        simulate_transits=False, fit_transits=False, \
+                        fit_spectra=False, spotted_starmodel=False, \
                         inputpars=inputpars, update=False, chi2rplot=True, \
                         model='batman', noscatter=noscatter, \
                         tight_ld_prior=tight_ld_prior, onlyres=onlyres, \
@@ -1428,8 +1440,8 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
         rplanet = 0.25
         loggstar = 5.0
     cycle(rplanet, rstar, tstar, loggstar, instrument, \
-            simulate_transits=False, fit_transits=True, \
-            fit_spectra=False, spotted_starmodel=False, \
+            simulate_transits=True, fit_transits=True, \
+            fit_spectra=True, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman', \
             tight_ld_prior=True, noscatter=True)
 
