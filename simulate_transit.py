@@ -22,6 +22,7 @@ homedir = os.path.expanduser('~')
 sys.path.append(homedir + '/Projects/git_code/Light-curve-tools/')
 import ld_coeffs
 from astropy.convolution import convolve
+from glob import glob
 from pdb import set_trace
 
 modelsfolder = homedir + '/Downloads/Shelf/stellar_models/phxinten/HiRes/'
@@ -569,3 +570,39 @@ def degrade_spec(spec, oldwl, newwl):
         newspec[j] = np.mean(spec[flag])
 
     return newspec
+
+def plot_transmission_spectra():
+    '''
+    Plot the uncertanties obtained on the transmission spectra.
+    '''
+    instrument = ['NIRCam', 'NIRSpec_Prism']
+    stars = ['3500K', '5000K']
+    root = '/home/giovanni/Projects/jwst_spots/revision2/'
+    for pnum, instr in enumerate(instrument):
+        fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(14, 5))
+        if instr == 'NIRCam':
+            labels = [4.5, 6.0, 7.5, 9.0]
+        else:
+            labels = [10.5, 11.5, 12.5, 13.5, 14.5]
+        for pcount, star in enumerate(stars):
+            ff = glob(root + instr + '/star_' + star \
+                        + '/*theta0*/simulated_data/spec_model_jwst.pic')
+            for fj, fspec in enumerate(ff):
+                mag = fspec.split('mag')[1].split('_')[0]
+                spec = pickle.load(open(fspec, 'rb'))
+                axs[pcount].errorbar(spec[0][:-1], spec[1][:-1] \
+                    - np.median(spec[1][:-1]), \
+                    yerr=spec[2][:-1], fmt='o-', capsize=2, mfc='white', mec='k')
+                #if fj == 0:
+                #    for ll in labels:
+                #        axs[pcount].errorbar([], [], yerr=[], label=ll, capsize=2)
+            axs[pcount].set_title(star.replace('K', '') + ' K star - ' \
+                    + instr.replace('_', ' '), fontsize=16)
+            if pcount == 0:
+                axs[pcount].set_ylabel('Transit depth uncertainty', fontsize=14)
+            axs[pcount].set_xlabel(r'Wavelength [$\mu$m]', fontsize=14)
+            #axs[pcount].legend(title='K mag')
+        plt.show()
+        plt.savefig(root + instr + '/' + instr + '_transmission_spec_unc.pdf')
+
+    return

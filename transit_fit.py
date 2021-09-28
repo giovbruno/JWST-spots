@@ -19,7 +19,8 @@ from dynesty import NestedSampler
 from pdb import set_trace
 plt.ioff()
 
-def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False):
+def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False, \
+        resume=False):
     '''
     Launches on all spectral bands
     '''
@@ -45,13 +46,13 @@ def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False):
     ymoderr = spec[2]
     #bestbin = ymoderr.argmin()
     bestbin = -1
-    transit_emcee(pardict, bestbin, bestbin, ldlist, model=model)
+    transit_emcee(pardict, bestbin, bestbin, ldlist, model=model, resume=resume)
 
     for i in np.arange(expchan - 1):
         if i != bestbin:
         #if i == 10:
             transit_emcee(pardict, int(i), bestbin, ldlist, model=model, \
-                    tight_ld_prior=tight_ld_prior)
+                    tight_ld_prior=tight_ld_prior, resume=resume)
 
     return
 
@@ -60,11 +61,11 @@ def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
 
     if resume and os.path.exists(diz['chains_folder'] + 'transit_' + str(ind) \
             + '_nested.pic'):
-            created = os.stat(diz['chains_folder'] + 'transit_' + \
-                    str(ind) + '_nested.pic').st_ctime
-            dd = datetime.fromtimestamp(created)
-            if dd > datetime(2021, 7, 13, 12, 0, 0):
-                return
+            #created = os.stat(diz['chains_folder'] + 'transit_' + \
+            #        str(ind) + '_nested.pic').st_ctime
+            #dd = datetime.fromtimestamp(created)
+            #if dd > datetime(2021, 7, 13, 12, 0, 0):
+            return
 
     print('Channel', str(ind))
     plt.close('all')
@@ -368,7 +369,7 @@ def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
         sampler = NestedSampler(lnprob, prior_transform, ndim, \
             nlive=nlive, ptform_args=[diz, t, ldlist, tight_ld_prior, ind], \
             logl_args=(t, y, yerr, model, fix_dict, True))
-        sampler.run_nested(print_progress=False)
+        sampler.run_nested(print_progress=True)
         sresults = sampler.results
 
         samples = sresults['samples']
@@ -432,9 +433,9 @@ def prior_transform(u, diz, t, ldlist, tight_ld_prior, wlind):
         else:  # Gaussian priors for LD coefficients
             sig = [0.05]
             x1 = stats.norm.ppf([u[1]])
-            x[1] = np.dot(sig, x1) + ldlist[wlind][0]
+            x[1] = max([np.dot(sig, x1) + ldlist[wlind][0], 0.])
             x2 = stats.norm.ppf([u[2]])
-            x[2] = np.dot(sig, x1) + ldlist[wlind][1]
+            x[2] = max([np.dot(sig, x1) + ldlist[wlind][1], 0.])
         x[3] = -1. + 2.*u[3] # r0
         x[4] = -1. + 2.*u[4] # r1
         x[5] = 10.*u[5] # r2
@@ -446,7 +447,8 @@ def prior_transform(u, diz, t, ldlist, tight_ld_prior, wlind):
         elif int(diz['theta']) == 40:
             x[9] = u[9]*0.02 + 0.11
         elif int(diz['theta']) == 21:
-            x[9] = u[9]*0.02 + 0.10
+            x[9] = u[9]*0.015 + 0.105
+            #x[9] = u[9]*0.02 + 0.10
         #xx = np.linspace(np.radians(80.), np.pi/2., 1000)
         #yy = lnp_sine(xx, np.radians(90.), np.radians(80.))
         #yy /= np.sum(yy)

@@ -38,7 +38,7 @@ plt.ioff()
 
 def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
             LM=True, model='KSint', plot_input_spectrum=True, \
-            mcmc=False, nest=False, nest_transits=True):
+            mcmc=False, nest=False, nest_transits=True, resume=False):
     '''
     Read in the chains files and initialize arrays with spot properties.
 
@@ -340,7 +340,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
                                 f_star)
                 if nest:
                     res = nested(2, A, yerrup, yerrdown, wl, zz, pardict, \
-                                f_star)
+                                f_star, resume=resume)
                 #if plot_input_spectrum:
                 #    # Plot input contrast spectrum
                 #    cspectrumf = open(pardict['data_folder'] \
@@ -578,19 +578,19 @@ def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
     if resume and os.path.exists(pardict['chains_folder'] \
                                                     + '/nested_spec.pic'):
 
-        created = os.stat(pardict['chains_folder'] \
-                                + '/nested_spec.pic').st_ctime
-        dd = datetime.fromtimestamp(created)
-        resfile = open(pardict['chains_folder'] + 'nested_spec.pic', 'rb')
-        resdict = pickle.load(resfile)
-        resfile.close()
-        samples = resdict.samples  # samples
-        weights = np.exp(resdict.logwt - resdict.logz[-1])
-        quantiles = [dyfunc.quantile(samps, [0.0001, 0.50, 0.9999], \
-                    weights=weights) for samps in samples.T][0]
-        if dd > datetime(2021, 7, 13, 12, 0, 0) \
-            and quantiles[0] >= pardict['minbeta']:
-            return
+        #created = os.stat(pardict['chains_folder'] \
+        #                        + '/nested_spec.pic').st_ctime
+        #dd = datetime.fromtimestamp(created)
+        #resfile = open(pardict['chains_folder'] + 'nested_spec.pic', 'rb')
+        #resdict = pickle.load(resfile)
+        #resfile.close()
+        #samples = resdict.samples  # samples
+        #weights = np.exp(resdict.logwt - resdict.logz[-1])
+        #quantiles = [dyfunc.quantile(samps, [0.0001, 0.50, 0.9999], \
+        #            weights=weights) for samps in samples.T][0]
+        #if dd > datetime(2021, 7, 13, 12, 0, 0) \
+        #    and quantiles[0] >= pardict['minbeta']:
+        return
 
     if pardict['minbeta'] >= 1.:
         pardict['minbeta'] = 0.
@@ -1456,4 +1456,27 @@ def plot_fitted_spectra(instrument, tstar, mag):
                 plt.legend()
     plt.show()
 
+    return
+
+def merge_nesting_runs():
+    '''
+    Get combined posterior distributions from multiple Nested Sampling runs.
+    '''
+    root = '/home/giovanni/Projects/jwst_spots/revision2/NIRSpec_Prism/star_3500K/'
+    runstring = 'p0.25_star0.47_3500_5.0_spot3200_i90_a3_theta0_mag10.5_tightLD_'
+    filestring = '/MCMC/nested_spec.pic'
+    r1 = pickle.load(open(root + runstring + '1' + filestring, 'rb'))
+    index = np.arange(2, 11)
+    for i in index:
+        rs = pickle.load(open(root + runstring + str(int(i)) + filestring, 'rb'))
+        r1 = dyfunc.merge_runs([r1, rs])
+        #samples = rs.samples  # samples
+        #weights = np.exp(rs.logwt - rs.logz[-1])
+        #quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
+        #            weights=weights) for samps in samples.T]
+        #print(quantiles)
+    cfig, caxes = dyplot.cornerplot(r1, color='b', show_titles=False, \
+            quantiles=[0.025, 0.50, 0.975])
+    plt.savefig(root + '10_noise_instances.pdf')
+    
     return

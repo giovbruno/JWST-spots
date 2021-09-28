@@ -16,7 +16,7 @@ from pdb import set_trace
 
 def go(magstar, pardict, operation, models, res=10, fittype='grid', \
         spotted_starmodel=True, model='KSint', noscatter=False, \
-        tight_ld_prior=False, oldf2f1=False, resume=False):
+        tight_ld_prior=False, oldf2f1=False, resume=False, realization=0):
 
     # Folders & files (add to the input dictionary)
     #pardict = {}
@@ -42,6 +42,10 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
         mpart = '_oldf2f1'
     else:
         mpart = ''
+    if realization != 0:
+        rpart = '_' + str(realization)
+    else:
+        rpart = ''
 
     pardict['case_folder'] = pardict['project_folder'] \
             + pardict['instrument'] + '/star_' + str(int(pardict['tstar'])) \
@@ -52,10 +56,12 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
             + '_i' + str(int(pardict['incl'])) + '_a' \
             + str(int(pardict['aumbra'])) + latpart \
             + '_theta' + str(int(pardict['theta'])) \
-            + '_mag' + str(magstar) + scatterpart + ldpart + mpart + '/'
+            + '_mag' + str(magstar) + scatterpart + ldpart + mpart \
+            + rpart + '/'
+
     if not os.path.exists(pardict['case_folder']):
-        if resume:
-            return pardict
+        #if resume:
+        #    return pardict
         os.mkdir(pardict['case_folder'])
     pardict['data_folder'] = pardict['case_folder'] + 'simulated_data/'
     if not os.path.exists(pardict['data_folder']):
@@ -127,12 +133,12 @@ def go(magstar, pardict, operation, models, res=10, fittype='grid', \
     # Select channels and fit transit + spots
     if 'fit_transits' in operation:
         transit_fit.transit_spectro(pardict, resol=res, model=model, \
-                    tight_ld_prior=tight_ld_prior)
+                    tight_ld_prior=tight_ld_prior, resume=resume)
     # Fit derived transit depth rise with stellar models
     if 'fit_spectra' in operation:
         spectra_fit.read_res(pardict, pardict['chains_folder'] \
           + 'contrast_plot_', pardict['chains_folder'] + 'contrast_res_', \
-          models, resol=res, model=model, mcmc=False, nest=True)
+          models, resol=res, model=model, mcmc=False, nest=True, resume=resume)
 
     # Now, for HST - requires ramp calculation but it's missing in the tutorials
     #simulate_transit.generate_spectrum_hst(pardict)
@@ -149,7 +155,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
             models='josh', res=10, fittype='grid', \
             spotted_starmodel=False, inputpars={}, update=True, \
             chi2rplot=False, model='KSint', noscatter=False, \
-            tight_ld_prior=False, onlyres=False, oldf2f1=False, type_res=7):
+            tight_ld_prior=False, onlyres=False, oldf2f1=False, type_res=7, \
+            resume=False, realization=0):
     '''
     Run simulations for several scenarios.
 
@@ -176,10 +183,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [4.5]
+        #mags = [6.0, 9.0]
     elif instrum == 'NIRSpec_Prism':
-        mags = np.linspace(10.5, 14.5, 5)
-        #mags = np.array([10.5])
+        #mags = np.linspace(10.5, 14.5, 5)
+        mags = np.array([10.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -222,10 +229,11 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     if tstar == 3500:
     # Very cool models will only be used for the fit
         tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-600.])
+        #tcontrast = np.array([-300.])
     elif tstar == 5000.:
-        tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-900.])
+        #tcontrast = np.arange(-1200, 0, 100)
+        tcontrast = np.array([-900.])
+
     if not onlyres:
         if len(opers) > 0:
             for mag in mags:
@@ -235,8 +243,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                         fittype=fittype, \
                         spotted_starmodel=spotted_starmodel, model=model, \
                         noscatter=noscatter, tight_ld_prior=tight_ld_prior, \
-                        oldf2f1=oldf2f1)
-
+                        oldf2f1=oldf2f1, resume=resume, realization=realization)
+    '''
     if type_res == 4:
         plot_res4(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
     elif type_res == 5:
@@ -246,6 +254,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     elif type_res == 7:
         plot_res7(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior, \
         noscatter=noscatter)
+    '''
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res3(ip, mags, tcontrast, models)
@@ -1253,7 +1262,10 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         weights = np.exp(sresults.logwt - sresults.logz[-1])
                         perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
                                     weights=weights) for samps in samples.T]
-                        A = perc[6][1]
+                        #A = perc[6][1]
+                        samples_equal = dyfunc.resample_equal(samples, weights)
+                        lmax = sresults.logz.argmax()
+                        A = samples_equal[lmax, 6]
                         data_folder = project_folder + instrument + 'star_' \
                             + str(int(ip['tstar'])) + 'K/p' \
                             + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
@@ -1268,7 +1280,9 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         lc = pickle.load(lcfile)
                         lcfile.close()
                         t, y, yerr, wl = lc
-                        SNR = A/np.mean(yerr)
+                        SNR = A*3.**0.5/np.mean(yerr)
+
+                        #print(A, np.mean(yerr), SNR)
                         #resfile = open(chains_folder + 'chains_spec.pic', 'rb')
                         resfile = open(chains_folder + 'nested_spec.pic', 'rb')
                         resdict = pickle.load(resfile)
@@ -1398,7 +1412,8 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
 
 
 def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
-        tight_ld_prior=True, onlyres=False, oldf2f1=False, typeres=7):
+        tight_ld_prior=True, onlyres=False, oldf2f1=False, typeres=7, \
+        realization=0):
     '''
     Parameters
     ----------
@@ -1428,7 +1443,7 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                         logg = 5.0
                         if latspot == 21:
                             incl = 88.75#88.7
-                    if latspot == 21.:
+                    if latspot == 21:
                         theta = 21
                     inputpars = {}
                     inputpars['incl'] = incl
@@ -1436,12 +1451,13 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                     inputpars['aumbra'] = spotsize
                     inputpars['latspot'] = latspot
                     cycle(rp, rs, ts, logg, instrum, \
-                        simulate_transits=False, fit_transits=False, \
-                        fit_spectra=False, spotted_starmodel=False, \
+                        simulate_transits=True, fit_transits=True, \
+                        fit_spectra=True, spotted_starmodel=False, \
                         inputpars=inputpars, update=False, chi2rplot=True, \
                         model='batman', noscatter=noscatter, \
                         tight_ld_prior=tight_ld_prior, onlyres=onlyres, \
-                        oldf2f1=False, type_res=typeres)
+                        oldf2f1=False, type_res=typeres, resume=False, \
+                        realization=realization)
 
     return
 
@@ -1475,7 +1491,7 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
             simulate_transits=True, fit_transits=True, \
             fit_spectra=True, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman', \
-            tight_ld_prior=True, noscatter=True)
+            tight_ld_prior=True, noscatter=True, resume=False)
 
     return
 
