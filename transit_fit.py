@@ -359,11 +359,22 @@ def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
             perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
                         weights=weights) for samps in samples.T]
             # These will be fixed during the fit
-            fix_dict['nspot'] = perc[-5][1]
-            fix_dict['wspot'] = perc[-4][1]
-            fix_dict['tspot'] = perc[-3][1]
-            fix_dict['incl'] = perc[-2][1]
-            fix_dict['t0'] = perc[-1][1]
+            #if perc[-5][2] - perc[-5][1] > perc[-5][1]:
+            #    fix_dict['nspot'] = 2.
+            #else:
+            #    fix_dict['nspot'] = perc[-5][1]
+            samples_equal = dyfunc.resample_equal(samples, weights)
+            Lmaxarg = sresults.logz.argmax()
+            fix_dict['nspot'] = samples_equal[:, -5][Lmaxarg]
+            fix_dict['wspot'] = samples_equal[:, -4][Lmaxarg]
+            fix_dict['tspot'] = samples_equal[:, -3][Lmaxarg]
+            fix_dict['incl'] = samples_equal[:, -2][Lmaxarg]
+            fix_dict['t0'] = samples_equal[:, -1][Lmaxarg]
+            #fix_dict['nspot'] = perc[-5][1]
+            #fix_dict['wspot'] = perc[-4][1]
+            #fix_dict['tspot'] = perc[-3][1]
+            #fix_dict['incl'] = perc[-2][1]
+            #fix_dict['t0'] = perc[-1][1]
 
         ndim = len(titles)
         sampler = NestedSampler(lnprob, prior_transform, ndim, \
@@ -470,7 +481,7 @@ def prior_transform(u, diz, t, ldlist, tight_ld_prior, wlind):
         x[3] = -1. + 2.*u[3]
         x[4] = -1. + 2.*u[4]
         x[5] = 10.*u[5]
-        x[6] = u[6] + 1.e-6
+        x[6] = 0.1*u[6] + 1.e-6
 
     return x
 

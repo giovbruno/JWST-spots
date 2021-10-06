@@ -50,7 +50,7 @@ def generate_spectrum_jwst(pardict, models):
     exo_dict['observation']['noise_floor'] = 20   #this can be a fixed level
                                                   #or it can be a filepath
     exo_dict['star']['mag'] = pardict['magstar']     #magnitude of the system
-    exo_dict['star']['ref_wave'] = 1.25   #For J mag = 1.25, H = 1.6, K =2.22..
+    exo_dict['star']['ref_wave'] = 2.22   #For J mag = 1.25, H = 1.6, K =2.22..
                                           #etc (all in micron)
 
     if not pardict['spotted_starmodel']:
@@ -402,6 +402,8 @@ def add_spots(pardict, resol=10, simultr=None, models='phoenix', \
         elif pardict['tstar'] == 5000:
             tt_ = np.arange(0.05 - 0.1, 0.150 + 0.1, 90./86400.)
             tt = np.arange(0.05 - 0.1, 0.150 + 0.1, 60./86400.)
+        if i == 0:
+            print('Data points in transit:', len(tt))
         transit_ = ksint_wrapper_fitcontrast.main(params, tt_, fix_dict)
         fint = interp1d(tt_, transit_, bounds_error=False, \
                     fill_value='extrapolate')
@@ -585,24 +587,31 @@ def plot_transmission_spectra():
         else:
             labels = [10.5, 11.5, 12.5, 13.5, 14.5]
         for pcount, star in enumerate(stars):
-            ff = glob(root + instr + '/star_' + star \
-                        + '/*theta0*/simulated_data/spec_model_jwst.pic')
+            if star == '3500K':
+                ff = glob(root + instr + '/star_' + star \
+                        + '/*2600*theta0*noscatter*/simulated_data/' \
+                                + 'spec_model_jwst.pic')
+            else:
+                ff = glob(root + instr + '/star_' + star \
+                        + '/*3800*theta0*noscatter*/simulated_data/' \
+                                + 'spec_model_jwst.pic')
             for fj, fspec in enumerate(ff):
+                print(fspec.split('/simulated_data')[0])
                 mag = fspec.split('mag')[1].split('_')[0]
                 spec = pickle.load(open(fspec, 'rb'))
-                axs[pcount].errorbar(spec[0][:-1], spec[1][:-1] \
-                    - np.median(spec[1][:-1]), \
-                    yerr=spec[2][:-1], fmt='o-', capsize=2, mfc='white', mec='k')
+                axs[pcount].errorbar(spec[0][:-1], np.zeros(len(spec[0]) - 1), \
+                 yerr=spec[2][:-1]*1e6, fmt='o-', capsize=2, mfc='white', mec='k')
                 #if fj == 0:
                 #    for ll in labels:
                 #        axs[pcount].errorbar([], [], yerr=[], label=ll, capsize=2)
             axs[pcount].set_title(star.replace('K', '') + ' K star - ' \
                     + instr.replace('_', ' '), fontsize=16)
             if pcount == 0:
-                axs[pcount].set_ylabel('Transit depth uncertainty', fontsize=14)
+                axs[pcount].set_ylabel('Transit depth uncertainty [ppm]', \
+                            fontsize=14)
             axs[pcount].set_xlabel(r'Wavelength [$\mu$m]', fontsize=14)
             #axs[pcount].legend(title='K mag')
         plt.show()
-        plt.savefig(root + instr + '/' + instr + '_transmission_spec_unc.pdf')
+        #plt.savefig(root + instr + '/' + instr + '_transmission_spec_unc.pdf')
 
     return

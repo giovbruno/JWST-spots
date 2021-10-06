@@ -169,7 +169,7 @@ def read_res(pardict, plotname, resfile, models, resol=10, interpolate=1, \
     kr = np.array(kr)
     unckr = np.array(unckr)
     if pardict['instrument'] == 'NIRCam':
-        flag = wl < 5
+        flag = wl < 4.02
     elif pardict['instrument'] == 'NIRSpec_Prism':
         flag = wl < 6.
     wl = wl[flag]
@@ -605,7 +605,7 @@ def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
         #sampler = DynamicNestedSampler(lnprob, prior_transform, ndim, \
         #    bound='single', nlive=100, logl_args=(A, yerrup, yerrdown, wl, zz, \
         #    pardict, fstar), ptform_args=[pardict])
-        sampler.run_nested(print_progress=False)
+        sampler.run_nested(print_progress=True)
         sresults = sampler.results
     else:
         sresults = pickle.load(open(pardict['chains_folder'] \
@@ -669,7 +669,7 @@ def plot_samples(samples, wl, A, yerrup, yerrdown, zz, pardict, fstar, text):
                                 fmt='ko', mfc='None', capsize=2)
     plt.xlabel('Wavelength [$\mu$m]', fontsize=14)
     plt.ylabel(r'$\Delta f(\lambda)$', fontsize=14)
-    plt.text(3.5, np.mean(A) + 0.00025,'{}'.format(int(pardict['tstar'])) \
+    plt.text(3.0, np.mean(A) + 0.00025,'{}'.format(int(pardict['tstar'])) \
       + ' K star\n' + pardict['instrument'].replace('/', '').replace('_', ' ') \
       + '\n' + r'$\theta={}^\circ$'.format(int(pardict['theta'])) + '\n' \
       + r'True $T_\bullet=$' + str(int(pardict['tumbra'])) \
@@ -1162,7 +1162,7 @@ def compute_deltaf_f(par, wlobs, zz, pardict, fstar=0., plots=False):
 
     deltaf_f = degrade_spec(idiff/fstar_spot, wth, wlobs)
 
-    f2f1 = np.pi*kr[:-1]**2*deltaf_f*beta
+    f2f1 = np.pi*kr[:-1][:len(wlobs)]**2*deltaf_f*beta
     #f2f1 = 2.*np.pi*muspot*np.diff(mmu)[0]*(np.array(kr)[:-1])**2*deltaf_f*beta
     if plots:
         print(tspot, beta)
@@ -1246,7 +1246,6 @@ def spec_res(par, spec, yerrup, yerrdown, wlobs, zz, pardict, fstar):
 
     fstar is the stellar spectrum computed from intensity.
     '''
-
     mod = compute_deltaf_f(par, wlobs, zz, pardict, fstar=fstar)
     res = np.zeros(len(mod))
     flag = spec >= mod
@@ -1462,21 +1461,102 @@ def merge_nesting_runs():
     '''
     Get combined posterior distributions from multiple Nested Sampling runs.
     '''
-    root = '/home/giovanni/Projects/jwst_spots/revision2/NIRSpec_Prism/star_3500K/'
-    runstring = 'p0.25_star0.47_3500_5.0_spot3200_i90_a3_theta0_mag10.5_tightLD_'
+    root = '/home/giovanni/Projects/jwst_spots/revision2/NIRCam/star_5000K/'
+    runstring = 'p0.75_star0.75_5000_4.5_spot3800_i90_a3_theta0_mag4.5_tightLD_'
     filestring = '/MCMC/nested_spec.pic'
+
+    hist = {}
+    hist['alpha'] = 0.3
+    hist['histtype'] = 'step'
+    hist2d = {}
+    hist2d['alpha'] = 0.1
     r1 = pickle.load(open(root + runstring + '1' + filestring, 'rb'))
+    samples = r1.samples  # samples
+    weights = np.exp(r1.logwt - r1.logz[-1])
+    quantiles1 = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
+                weights=weights) for samps in samples.T]
+    print(quantiles1)
+    #fig2 = plt.figure(2)
+    #plt.errorbar([1], [quantiles1[0][1]], yerr=[[np.diff(quantiles1[0])[0]], \
+    #            [np.diff(quantiles1[0])[1]]], fmt='ko', capsize=2, \
+    #            alpha=0.3)
+    plt.figure(1)
+    cfig, caxes = dyplot.cornerplot(r1, color='k', show_titles=False, \
+            hist_kwargs=hist, quantiles=[], hist2d_kwargs=hist2d)
     index = np.arange(2, 11)
     for i in index:
         rs = pickle.load(open(root + runstring + str(int(i)) + filestring, 'rb'))
         r1 = dyfunc.merge_runs([r1, rs])
-        #samples = rs.samples  # samples
-        #weights = np.exp(rs.logwt - rs.logz[-1])
-        #quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
-        #            weights=weights) for samps in samples.T]
-        #print(quantiles)
+        samples = rs.samples  # samples
+        weights = np.exp(rs.logwt - rs.logz[-1])
+        quantiles = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
+                    weights=weights) for samps in samples.T]
+        print(quantiles)
+        print('Relative difference:', \
+                    (quantiles[1][1] - quantiles1[1][1])/quantiles1[1][1])
+        print('Sigma difference:', \
+                (quantiles[1][1] - quantiles1[1][1])/np.diff(quantiles1[1])[1   ])
+        #plt.figure(2)
+        #plt.errorbar([i], [quantiles[0][1]], yerr=[[np.diff(quantiles[0])[0]], \
+        #            [np.diff(quantiles[0])[1]]], fmt='ko', capsize=2, alpha=0.3)
+        plt.figure(1)
+        cfig, caxes = dyplot.cornerplot(rs, color='k', show_titles=False, \
+                fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
+                hist2d_kwargs=hist2d)
+
+    hist['alpha'] = 1.0
+    hist['linewidth'] = 2
+    hist2d['alpha'] = 1.0
+    label_kwargs = {}
+    label_kwargs['fontsize'] = 14
+    labels = [r'$T_\bullet$ [K]', r'$\beta$']#
     cfig, caxes = dyplot.cornerplot(r1, color='b', show_titles=False, \
-            quantiles=[0.025, 0.50, 0.975])
-    plt.savefig(root + '10_noise_instances.pdf')
-    
+            fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
+            hist2d_kwargs=hist2d, labels=labels, label_kwargs=label_kwargs)
+
+    print('Merged run:')
+    samples = r1.samples  # samples
+    weights = np.exp(r1.logwt - r1.logz[-1])
+    quantiles = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
+                weights=weights) for samps in samples.T]
+    print(quantiles)
+    print(quantiles[0][0], np.diff(quantiles[0])[1], np.diff(quantiles[0])[0])
+    print('Max-min:', quantiles[0][0] + np.diff(quantiles[0])[1], \
+                quantiles[0][0] - np.diff(quantiles[0])[0])
+    print('Relative difference:', \
+                (quantiles[1][1] - quantiles1[1][1])/quantiles1[1][1])
+    #plt.figure(2)
+    #plt.errorbar([i + 1], [quantiles[0][1]], \
+    #        yerr=[[np.diff(quantiles[0])[0]], \
+    #                [np.diff(quantiles[0])[1]]], fmt='bo', capsize=2)
+    #plt.xlabel('Noise instance', fontsize=14)
+    #plt.ylabel(r'$T_\bullet$ [K]', fontsize=14)
+
+    # Add the one with no scatter
+    runstring = 'p0.75_star0.75_5000_4.5_spot3800_i90_a3_theta0_mag4.5_' \
+                + 'noscatter_tightLD'
+    r2 = pickle.load(open(root + runstring + filestring, 'rb'))
+    samples = r2.samples  # samples
+    weights = np.exp(r2.logwt - r2.logz[-1])
+    quantiles = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
+                weights=weights) for samps in samples.T]
+    print('No scatter')
+    print(quantiles)
+    print(quantiles[0][0], np.diff(quantiles[0])[1], np.diff(quantiles[0])[0])
+    print('Max-min:', quantiles[0][0] + np.diff(quantiles[0])[1], \
+                quantiles[0][0] - np.diff(quantiles[0])[0])
+    print('Relative difference:', \
+                (quantiles[1][1] - quantiles1[1][1])/quantiles1[1][1])
+    plt.figure(1)
+    cfig, caxes = dyplot.cornerplot(r2, color='orange', show_titles=False, \
+            fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
+            hist2d_kwargs=hist2d, labels=labels, label_kwargs=label_kwargs)
+    plt.savefig(root + '10_noise_instances_corner.pdf')
+    plt.show()
+    #plt.figure(2)
+    #plt.errorbar([i + 2], [quantiles[0][1]], yerr=[[np.diff(quantiles[0])[0]], \
+    #                    [np.diff(quantiles[0])[1]]], fmt='o', capsize=2, \
+    #                    ecolor='orange', mfc='orange', mec='orange')
+    #plt.savefig(root + '10_noise_instances.pdf')
+
     return

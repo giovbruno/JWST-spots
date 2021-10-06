@@ -183,10 +183,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [6.0, 9.0]
+        #mags = [7.5]
     elif instrum == 'NIRSpec_Prism':
-        #mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([10.5])
+        mags = np.linspace(10.5, 14.5, 5)
+        #mags = np.array([12.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -231,8 +231,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         tcontrast = np.arange(-900, 0, 100)
         #tcontrast = np.array([-300.])
     elif tstar == 5000.:
-        #tcontrast = np.arange(-1200, 0, 100)
-        tcontrast = np.array([-900.])
+        tcontrast = np.arange(-1200, 0, 100)
+        #tcontrast = np.array([-1200.])
 
     if not onlyres:
         if len(opers) > 0:
@@ -244,7 +244,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                         spotted_starmodel=spotted_starmodel, model=model, \
                         noscatter=noscatter, tight_ld_prior=tight_ld_prior, \
                         oldf2f1=oldf2f1, resume=resume, realization=realization)
-    '''
+
     if type_res == 4:
         plot_res4(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
     elif type_res == 5:
@@ -254,7 +254,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     elif type_res == 7:
         plot_res7(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior, \
         noscatter=noscatter)
-    '''
+
     #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
     #plot_res3(ip, mags, tcontrast, models)
@@ -1196,7 +1196,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
     return
 
 def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
-        noscatter=False):
+        noscatter=False, scalehisto=30):
 
     #aumbras = np.arange(2, 6)
     plothistos = [True, False]
@@ -1254,7 +1254,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         if not os.path.exists(chains_folder):
                             print(chains_folder, 'does not exist')
                             continue
-                        print(chains_folder, tumbra)
+                        #print(chains_folder, tumbra)
                         ffopen = open(chains_folder + 'transit_-1_nested.pic', 'rb')
                         sresults = pickle.load(ffopen)
                         ffopen.close()
@@ -1282,7 +1282,8 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         t, y, yerr, wl = lc
                         SNR = A*3.**0.5/np.mean(yerr)
 
-                        #print(A, np.mean(yerr), SNR)
+                        print(chains_folder.split('star_')[1], \
+                                A, np.mean(yerr), SNR)
                         #resfile = open(chains_folder + 'chains_spec.pic', 'rb')
                         resfile = open(chains_folder + 'nested_spec.pic', 'rb')
                         resdict = pickle.load(resfile)
@@ -1293,10 +1294,10 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         weights = np.exp(resdict.logwt - resdict.logz[-1])  #        normalized     weights
                         #quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
                         #            weights=weights) for samps in samples.T]
-                        #quantiles = [dyfunc.quantile(samps, [0.05, 0.50, 0.95], \
-                        #            weights=weights) for samps in samples.T]
-                        quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
+                        quantiles = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
                                     weights=weights) for samps in samples.T]
+                        #quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
+                        #            weights=weights) for samps in samples.T]
                         yerrup = np.diff(quantiles[0])[1]
                         yerrdown = np.diff(quantiles[0])[0]
                         toutput = quantiles[0][1]
@@ -1321,10 +1322,11 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         if plothisto:
                             n, bins, _ = \
                              plt.hist(samples_equal[:, 0] - (ip['tstar'] + td), \
-                             orientation='horizontal', bottom=SNR*100, \
+                             orientation='horizontal', bottom=SNR*scalehisto, \
                              alpha=0.7, density=False, bins=20, \
                              color=colour[j], histtype='step')
-                            plt.plot([SNR*100, SNR*100], [bins.min() - 20, \
+                            plt.plot([SNR*scalehisto, SNR*scalehisto], \
+                                    [bins.min() - 20, \
                                     bins.max() + 20], c=colour[j])
                         snr.append(SNR)
                         tdiff.append(toutput - tumbra)
@@ -1360,29 +1362,32 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                 plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], \
                     [-tc - 100, -tc - 100], alpha=0.5, color=colour[i])
             else:
-                plt.plot([100, SNRmax*100 + 500], \
+                plt.plot([scalehisto, SNRmax*scalehisto + 50*scalehisto], \
                     [-tc - 100, -tc - 100], alpha=0.5, color=colour[i])
             text_kwargs = dict(color=colour[i])
             if not plothisto:
                 plt.text(snr.max()*0.8, -500 - 100*i, r'$T_\bullet=' \
               + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
             else:
-                plt.text(snr.max()*80., -500 - 100*i, r'$T_\bullet=' \
+                plt.text(snr.max()*(scalehisto - 10), -500 - 100*i, \
+                r'$T_\bullet=' \
             + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
 
         if not plothisto:
             plt.plot([0, SNRmax + 5], [0., 0.], 'k--')
             plt.xlim(0, SNRmax + 5)
         else:
-            plt.plot([100, SNRmax*100 + 500], [0., 0.], 'k--')
-            plt.xlim(100, SNRmax*100 + 500)
+            plt.plot([scalehisto, SNRmax*scalehisto + 100*scalehisto], \
+                        [0., 0.], 'k--')
+            plt.xlim(scalehisto, SNRmax*scalehisto + 300)
         plt.ylim(-1000, 1000)
         if not plothisto:
             plt.xlabel('Occultation SNR', fontsize=16)
-            plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K] $(3\sigma)$', \
+            plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K] $(2\sigma)$', \
                         fontsize=16)
         else:
-            plt.xlabel(r'Occultation SNR$\times 100$', fontsize=16)
+            plt.xlabel(r'Occultation SNR$\times$' + str(scalehisto), \
+                        fontsize=16)
             plt.ylabel(r'$T_\bullet$ (meas) $- T_\bullet$ (real) [K]', \
                     fontsize=16)
         if abs(tcmin) > abs(tcmax):
@@ -1451,7 +1456,7 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                     inputpars['aumbra'] = spotsize
                     inputpars['latspot'] = latspot
                     cycle(rp, rs, ts, logg, instrum, \
-                        simulate_transits=True, fit_transits=True, \
+                        simulate_transits=False, fit_transits=False, \
                         fit_spectra=True, spotted_starmodel=False, \
                         inputpars=inputpars, update=False, chi2rplot=True, \
                         model='batman', noscatter=noscatter, \
