@@ -57,8 +57,13 @@ def transit_spectro(pardict, resol=10, model='KSint', tight_ld_prior=False, \
     return
 
 def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
-            resume=False, nested=True, tight_ld_prior=True):
-
+            resume=False, nested=True, tight_ld_prior=True, bestlike=False):
+    '''
+    Parameters
+    ----------
+    bestlike: use best-likelihood values from the white LC to fit parameters
+              in the spectroscopic channels - or median values
+    '''
     if resume and os.path.exists(diz['chains_folder'] + 'transit_' + str(ind) \
             + '_nested.pic'):
             #created = os.stat(diz['chains_folder'] + 'transit_' + \
@@ -365,16 +370,18 @@ def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
             #    fix_dict['nspot'] = perc[-5][1]
             samples_equal = dyfunc.resample_equal(samples, weights)
             Lmaxarg = sresults.logz.argmax()
-            fix_dict['nspot'] = samples_equal[:, -5][Lmaxarg]
-            fix_dict['wspot'] = samples_equal[:, -4][Lmaxarg]
-            fix_dict['tspot'] = samples_equal[:, -3][Lmaxarg]
-            fix_dict['incl'] = samples_equal[:, -2][Lmaxarg]
-            fix_dict['t0'] = samples_equal[:, -1][Lmaxarg]
-            #fix_dict['nspot'] = perc[-5][1]
-            #fix_dict['wspot'] = perc[-4][1]
-            #fix_dict['tspot'] = perc[-3][1]
-            #fix_dict['incl'] = perc[-2][1]
-            #fix_dict['t0'] = perc[-1][1]
+            if bestlike:
+                fix_dict['nspot'] = samples_equal[:, -5][Lmaxarg]
+                fix_dict['wspot'] = samples_equal[:, -4][Lmaxarg]
+                fix_dict['tspot'] = samples_equal[:, -3][Lmaxarg]
+                fix_dict['incl'] = samples_equal[:, -2][Lmaxarg]
+                fix_dict['t0'] = samples_equal[:, -1][Lmaxarg]
+            else:
+                fix_dict['nspot'] = perc[-5][1]
+                fix_dict['wspot'] = perc[-4][1]
+                fix_dict['tspot'] = perc[-3][1]
+                fix_dict['incl'] = perc[-2][1]
+                fix_dict['t0'] = perc[-1][1]
 
         ndim = len(titles)
         sampler = NestedSampler(lnprob, prior_transform, ndim, \

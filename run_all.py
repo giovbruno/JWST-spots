@@ -183,10 +183,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        #mags = [7.5]
+        mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
         mags = np.linspace(10.5, 14.5, 5)
-        #mags = np.array([12.5])
+        #mags = np.array([14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -231,8 +231,8 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         tcontrast = np.arange(-900, 0, 100)
         #tcontrast = np.array([-300.])
     elif tstar == 5000.:
-        tcontrast = np.arange(-1200, 0, 100)
-        #tcontrast = np.array([-1200.])
+        #tcontrast = np.arange(-1200, 0, 100)
+        tcontrast = np.array([-1200.])
 
     if not onlyres:
         if len(opers) > 0:
@@ -1196,7 +1196,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
     return
 
 def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
-        noscatter=False, scalehisto=30):
+        noscatter=False, scalehisto=500):
 
     #aumbras = np.arange(2, 6)
     plothistos = [True, False]
@@ -1254,18 +1254,25 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         if not os.path.exists(chains_folder):
                             print(chains_folder, 'does not exist')
                             continue
+                        transits = glob.glob(chains_folder + 'transit*pic')
+                        tmax = len(transits) - 2
                         #print(chains_folder, tumbra)
-                        ffopen = open(chains_folder + 'transit_-1_nested.pic', 'rb')
-                        sresults = pickle.load(ffopen)
-                        ffopen.close()
-                        samples = sresults['samples']
-                        weights = np.exp(sresults.logwt - sresults.logz[-1])
-                        perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
-                                    weights=weights) for samps in samples.T]
-                        #A = perc[6][1]
-                        samples_equal = dyfunc.resample_equal(samples, weights)
-                        lmax = sresults.logz.argmax()
-                        A = samples_equal[lmax, 6]
+                        A, Aunc = [], []
+                        for index in [1, tmax, -1]:
+                            ffopen = open(chains_folder \
+                                + 'transit_' + str(index) + '_nested.pic', 'rb')
+                            sresults = pickle.load(ffopen)
+                            ffopen.close()
+                            samples = sresults['samples']
+                            weights = np.exp(sresults.logwt - sresults.logz[-1])
+                            perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
+                                        weights=weights) for samps in samples.T]
+                            #A = perc[6][1]
+                            #samples_equal = dyfunc.resample_equal(samples, weights)
+                            #lmax = sresults.logz.argmax()
+                            #A = samples_equal[lmax, 6])
+                            A.append(perc[6][1])
+                            Aunc.append(np.mean(np.diff(perc[6])))
                         data_folder = project_folder + instrument + 'star_' \
                             + str(int(ip['tstar'])) + 'K/p' \
                             + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
@@ -1276,14 +1283,13 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                             + '_theta' + str(int(theta)) \
                             + '_mag' + str(mag) + scatterpart + ldpart \
                                         + '/simulated_data/'
-                        lcfile = open(data_folder + 'transit_spots_-1.pic', 'rb')
-                        lc = pickle.load(lcfile)
-                        lcfile.close()
-                        t, y, yerr, wl = lc
-                        SNR = A*3.**0.5/np.mean(yerr)
-
-                        print(chains_folder.split('star_')[1], \
-                                A, np.mean(yerr), SNR)
+                        #lcfile = open(data_folder + 'transit_spots_-1.pic', 'rb')
+                        #lc = pickle.load(lcfile)
+                        #lcfile.close()
+                        #t, y, yerr, wl = lc
+                        #SNR = A*3.**0.5/np.mean(yerr)
+                        SNR = np.sqrt((A[0] - A[1])**2 + A[2]**2)/Aunc[1]
+                        print(chains_folder.split('star_')[1], SNR)
                         #resfile = open(chains_folder + 'chains_spec.pic', 'rb')
                         resfile = open(chains_folder + 'nested_spec.pic', 'rb')
                         resdict = pickle.load(resfile)
@@ -1369,13 +1375,17 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                 plt.text(snr.max()*0.8, -500 - 100*i, r'$T_\bullet=' \
               + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
             else:
-                plt.text(snr.max()*(scalehisto - 10), -500 - 100*i, \
+                if int(ip['tstar']) == 5000:
+                    tstart = -500
+                elif int(ip['tstar']) == 3500:
+                    tstart = -700
+                plt.text(snr.max()*(scalehisto - scalehisto/5), tstart - 100*i, \
                 r'$T_\bullet=' \
             + str(int(ip['tstar'] + tc)) + '$ K', fontsize=12, **text_kwargs)
 
         if not plothisto:
             plt.plot([0, SNRmax + 5], [0., 0.], 'k--')
-            plt.xlim(0, SNRmax + 5)
+            plt.xlim(max([SNRmin - 2, 0]), SNRmax + 1)
         else:
             plt.plot([scalehisto, SNRmax*scalehisto + 100*scalehisto], \
                         [0., 0.], 'k--')

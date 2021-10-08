@@ -1476,13 +1476,13 @@ def merge_nesting_runs():
     quantiles1 = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
                 weights=weights) for samps in samples.T]
     print(quantiles1)
-    #fig2 = plt.figure(2)
-    #plt.errorbar([1], [quantiles1[0][1]], yerr=[[np.diff(quantiles1[0])[0]], \
-    #            [np.diff(quantiles1[0])[1]]], fmt='ko', capsize=2, \
-    #            alpha=0.3)
-    plt.figure(1)
-    cfig, caxes = dyplot.cornerplot(r1, color='k', show_titles=False, \
-            hist_kwargs=hist, quantiles=[], hist2d_kwargs=hist2d)
+    fig2 = plt.figure(2)
+    plt.errorbar([1], [quantiles1[0][1]], yerr=[[np.diff(quantiles1[0])[0]], \
+                [np.diff(quantiles1[0])[1]]], fmt='ko', capsize=2, \
+                alpha=0.3)
+    #plt.figure(1)
+    #cfig, caxes = dyplot.cornerplot(r1, color='k', show_titles=False, \
+    #        hist_kwargs=hist, quantiles=[], hist2d_kwargs=hist2d)
     index = np.arange(2, 11)
     for i in index:
         rs = pickle.load(open(root + runstring + str(int(i)) + filestring, 'rb'))
@@ -1493,16 +1493,16 @@ def merge_nesting_runs():
                     weights=weights) for samps in samples.T]
         print(quantiles)
         print('Relative difference:', \
-                    (quantiles[1][1] - quantiles1[1][1])/quantiles1[1][1])
+                    (quantiles[0][1] - quantiles1[0][1])/quantiles1[0][1])
         print('Sigma difference:', \
-                (quantiles[1][1] - quantiles1[1][1])/np.diff(quantiles1[1])[1   ])
-        #plt.figure(2)
-        #plt.errorbar([i], [quantiles[0][1]], yerr=[[np.diff(quantiles[0])[0]], \
-        #            [np.diff(quantiles[0])[1]]], fmt='ko', capsize=2, alpha=0.3)
-        plt.figure(1)
-        cfig, caxes = dyplot.cornerplot(rs, color='k', show_titles=False, \
-                fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
-                hist2d_kwargs=hist2d)
+                (quantiles[0][1] - quantiles1[0][1])/np.diff(quantiles1[0])[1])
+        plt.figure(2)
+        plt.errorbar([i], [quantiles[0][1]], yerr=[[np.diff(quantiles[0])[0]], \
+                    [np.diff(quantiles[0])[1]]], fmt='ko', capsize=2, alpha=0.3)
+        #plt.figure(1)
+        #cfig, caxes = dyplot.cornerplot(rs, color='k', show_titles=False, \
+        #        fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
+        #        hist2d_kwargs=hist2d)
 
     hist['alpha'] = 1.0
     hist['linewidth'] = 2
@@ -1510,9 +1510,9 @@ def merge_nesting_runs():
     label_kwargs = {}
     label_kwargs['fontsize'] = 14
     labels = [r'$T_\bullet$ [K]', r'$\beta$']#
-    cfig, caxes = dyplot.cornerplot(r1, color='b', show_titles=False, \
-            fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
-            hist2d_kwargs=hist2d, labels=labels, label_kwargs=label_kwargs)
+    #cfig, caxes = dyplot.cornerplot(r1, color='b', show_titles=False, \
+    #        fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
+    #        hist2d_kwargs=hist2d, labels=labels, label_kwargs=label_kwargs)
 
     print('Merged run:')
     samples = r1.samples  # samples
@@ -1521,16 +1521,16 @@ def merge_nesting_runs():
                 weights=weights) for samps in samples.T]
     print(quantiles)
     print(quantiles[0][0], np.diff(quantiles[0])[1], np.diff(quantiles[0])[0])
-    print('Max-min:', quantiles[0][0] + np.diff(quantiles[0])[1], \
-                quantiles[0][0] - np.diff(quantiles[0])[0])
+    print('Min-max:', quantiles[0][1] - np.diff(quantiles[0])[0], \
+                quantiles[0][1] + np.diff(quantiles[0])[1])
     print('Relative difference:', \
-                (quantiles[1][1] - quantiles1[1][1])/quantiles1[1][1])
-    #plt.figure(2)
-    #plt.errorbar([i + 1], [quantiles[0][1]], \
-    #        yerr=[[np.diff(quantiles[0])[0]], \
-    #                [np.diff(quantiles[0])[1]]], fmt='bo', capsize=2)
-    #plt.xlabel('Noise instance', fontsize=14)
-    #plt.ylabel(r'$T_\bullet$ [K]', fontsize=14)
+                (quantiles[0][1] - quantiles1[0][1])/quantiles1[0][1])
+    plt.figure(2)
+    plt.errorbar([i + 1], [quantiles[0][1]], \
+            yerr=[[np.diff(quantiles[0])[0]], \
+                    [np.diff(quantiles[0])[1]]], fmt='bo', capsize=2)
+    plt.xlabel('Noise instance', fontsize=14)
+    plt.ylabel(r'$T_\bullet$ [K]', fontsize=14)
 
     # Add the one with no scatter
     runstring = 'p0.75_star0.75_5000_4.5_spot3800_i90_a3_theta0_mag4.5_' \
@@ -1543,20 +1543,21 @@ def merge_nesting_runs():
     print('No scatter')
     print(quantiles)
     print(quantiles[0][0], np.diff(quantiles[0])[1], np.diff(quantiles[0])[0])
-    print('Max-min:', quantiles[0][0] + np.diff(quantiles[0])[1], \
-                quantiles[0][0] - np.diff(quantiles[0])[0])
+    print('Min-max:', quantiles[0][1] - np.diff(quantiles[0])[0], \
+                quantiles[0][1] + np.diff(quantiles[0])[1])
     print('Relative difference:', \
-                (quantiles[1][1] - quantiles1[1][1])/quantiles1[1][1])
-    plt.figure(1)
-    cfig, caxes = dyplot.cornerplot(r2, color='orange', show_titles=False, \
-            fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
-            hist2d_kwargs=hist2d, labels=labels, label_kwargs=label_kwargs)
-    plt.savefig(root + '10_noise_instances_corner.pdf')
+                (quantiles[0][1] - quantiles1[0][1])/quantiles1[0][1])
+    #plt.figure(1)
+    #cfig, caxes = dyplot.cornerplot(r2, color='orange', show_titles=False, \
+    #        fig=(cfig, caxes), hist_kwargs=hist, quantiles=[], \
+    #        hist2d_kwargs=hist2d, labels=labels, label_kwargs=label_kwargs)
+    #plt.savefig(root + '10_noise_instances_corner.pdf')
+    #plt.show()
+    plt.figure(2)
+    plt.errorbar([i + 2], [quantiles[0][1]], yerr=[[np.diff(quantiles[0])[0]], \
+                        [np.diff(quantiles[0])[1]]], fmt='o', capsize=2, \
+                        ecolor='orange', mfc='orange', mec='orange')
     plt.show()
-    #plt.figure(2)
-    #plt.errorbar([i + 2], [quantiles[0][1]], yerr=[[np.diff(quantiles[0])[0]], \
-    #                    [np.diff(quantiles[0])[1]]], fmt='o', capsize=2, \
-    #                    ecolor='orange', mfc='orange', mec='orange')
-    #plt.savefig(root + '10_noise_instances.pdf')
+    plt.savefig(root + '10_noise_instances.pdf')
 
     return
