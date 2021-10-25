@@ -594,7 +594,7 @@ def nested(ndim, A, yerrup, yerrdown, wl, zz, pardict, fstar, read_sol=False, \
 
     if pardict['minbeta'] >= 1.:
         pardict['minbeta'] = 0.
-
+    pardict['minbeta'] = 0.
     print('\nStarting nested sampling\n')
 
     if not read_sol:
@@ -1411,6 +1411,7 @@ def get_spot_size(wspot, nspot, rprs, pardict, dict_chains, transit_model=False)
         aR = (6.67408e-11*rhostar*1e3*(per_planet*86400.)**2/(3.*np.pi))**(1./3.)
         # Derived half width at half max
         half_fwhm = wspot*(np.log(2))**(1./nspot)
+        set_trace()
         #half_fwhm = wspot*(6.*np.log(10.))**(1./nspot)
         delta = 2.*np.pi*1.5*half_fwhm*aR/per_planet - planet_angle
         delta = max([delta, 0.])

@@ -599,8 +599,14 @@ def plot_transmission_spectra():
                 print(fspec.split('/simulated_data')[0])
                 mag = fspec.split('mag')[1].split('_')[0]
                 spec = pickle.load(open(fspec, 'rb'))
-                axs[pcount].errorbar(spec[0][:-1], np.zeros(len(spec[0]) - 1), \
-                 yerr=spec[2][:-1]*1e6, fmt='o-', capsize=2, mfc='white', mec='k')
+                wl = spec[0][:-1]
+                yerr = spec[2][:-1]*1e6
+                if instr == 'NIRCam':
+                    flag = wl < 4.02
+                    wl = wl[flag]
+                    yerr = yerr[flag]
+                axs[pcount].errorbar(wl, np.zeros(len(wl)), \
+                 yerr=yerr, fmt='o-', capsize=2, mfc='white', mec='k')
                 #if fj == 0:
                 #    for ll in labels:
                 #        axs[pcount].errorbar([], [], yerr=[], label=ll, capsize=2)
@@ -612,6 +618,6 @@ def plot_transmission_spectra():
             axs[pcount].set_xlabel(r'Wavelength [$\mu$m]', fontsize=14)
             #axs[pcount].legend(title='K mag')
         plt.show()
-        #plt.savefig(root + instr + '/' + instr + '_transmission_spec_unc.pdf')
+        plt.savefig(root + instr + '/' + instr + '_transmission_spec_unc.pdf')
 
     return

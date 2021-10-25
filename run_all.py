@@ -183,10 +183,10 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
 
     if instrum == 'NIRCam':
         mags = [4.5, 6.0, 7.5, 9.0]
-        mags = [4.5]
+        #mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
-        mags = np.linspace(10.5, 14.5, 5)
-        #mags = np.array([14.5])
+        #mags = np.linspace(10.5, 14.5, 5)
+        mags = np.array([13.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -228,11 +228,11 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
     ## Try only one Tspot
     if tstar == 3500:
     # Very cool models will only be used for the fit
-        tcontrast = np.arange(-900, 0, 100)
-        #tcontrast = np.array([-300.])
+        #tcontrast = np.arange(-900, 0, 100)
+        tcontrast = np.array([-300.])
     elif tstar == 5000.:
-        #tcontrast = np.arange(-1200, 0, 100)
-        tcontrast = np.array([-1200.])
+        tcontrast = np.arange(-1200, 0, 100)
+        #tcontrast = np.array([-1200.])
 
     if not onlyres:
         if len(opers) > 0:
@@ -1196,7 +1196,7 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
     return
 
 def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
-        noscatter=False, scalehisto=500):
+        noscatter=False, scalehisto=100):
 
     #aumbras = np.arange(2, 6)
     plothistos = [True, False]
@@ -1223,7 +1223,8 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
         SNRmax = -np.inf
         tcmax = -np.inf
         tcmin = np.inf
-        snr, tdiff, tu, yerru, yerrd, mmags = [], [], [], [], [], []
+        snr, tdiff, tu, yerru, yerrd, mmags, flatness, betamin \
+                    = [], [], [], [], [], [], [], []
         for i, size in enumerate(aumbras):
             sizes = []
             for k, mag in enumerate(mags):
@@ -1258,7 +1259,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         tmax = len(transits) - 2
                         #print(chains_folder, tumbra)
                         A, Aunc = [], []
-                        for index in [1, tmax, -1]:
+                        for index in [1, tmax - 1, -1]:
                             ffopen = open(chains_folder \
                                 + 'transit_' + str(index) + '_nested.pic', 'rb')
                             sresults = pickle.load(ffopen)
@@ -1268,9 +1269,14 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                             perc = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
                                         weights=weights) for samps in samples.T]
                             #A = perc[6][1]
-                            #samples_equal = dyfunc.resample_equal(samples, weights)
-                            #lmax = sresults.logz.argmax()
-                            #A = samples_equal[lmax, 6])
+                            samples_equal = dyfunc.resample_equal(samples, weights)
+                            # Evaluate fitted n, to decide whether the
+                            # solution is reliable
+                            if index == -1:
+                                flatness.append(perc[7][2] - perc[7][1])
+                                #print('n = ', perc[7][2] - perc[7][1])
+                                #flatness.append(scipy.stats.kurtosis(samples_equal[:, 7]))
+                                #print(scipy.stats.kurtosis(samples_equal[:, 7]))
                             A.append(perc[6][1])
                             Aunc.append(np.mean(np.diff(perc[6])))
                         data_folder = project_folder + instrument + 'star_' \
@@ -1302,6 +1308,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                         #            weights=weights) for samps in samples.T]
                         quantiles = [dyfunc.quantile(samps, [0.025, 0.50, 0.975], \
                                     weights=weights) for samps in samples.T]
+
                         #quantiles = [dyfunc.quantile(samps, [0.003, 0.50, 0.997], \
                         #            weights=weights) for samps in samples.T]
                         yerrup = np.diff(quantiles[0])[1]
@@ -1324,7 +1331,12 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                             tcmax = toutput - tumbra
 
                         # Resample weighted samples.
-                        samples_equal = dyfunc.resample_equal(samples, weights)
+                        samples_equal = dyfunc.resample_equal(samples, \
+                                weights)
+                        # Get beta_min
+                        betamin.append(samples_equal[:, 1].min())
+                        #betamin.append( \
+                        #            scipy.stats.kurtosis(samples_equal[:, 1]))
                         if plothisto:
                             n, bins, _ = \
                              plt.hist(samples_equal[:, 0] - (ip['tstar'] + td), \
@@ -1347,13 +1359,31 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
         yerru = np.array(yerru)
         yerrd = np.array(yerrd)
         mmags = np.array(mmags)
+        flatness = np.array(flatness)
+        betamin = np.array(betamin)
         for j, mm in enumerate(mags):
             for i, tc in enumerate(tcontrast):
                 #rand = np.random.uniform(low=-50, high=50)
                 flag = np.logical_and(tu - ip['tstar'] == tc, mmags == mm)
                 if not plothisto:
-                    plt.errorbar(snr[flag], tdiff[flag], yerr=([yerrd[flag], \
-                        yerru[flag]]), fmt='.', color=colour[i], capsize=2)
+                    #flatflag = betamin[flag] < 0.5
+                    flatflag = flatness[flag] < 2
+                    plt.errorbar(snr[flag][flatflag], tdiff[flag][flatflag], \
+                            yerr=([yerrd[flag][flatflag], \
+                            yerru[flag][flatflag]]), fmt='.', color=colour[i], \
+                            capsize=2)
+                    plt.errorbar(snr[flag][~flatflag], \
+                            tdiff[flag][~flatflag], \
+                            yerr=([yerrd[flag][~flatflag], \
+                            yerru[flag][~flatflag]]), capsize=2, \
+                            color=colour[i])
+                    plt.errorbar(snr[flag][~flatflag], \
+                            tdiff[flag][~flatflag], \
+                            yerr=([yerrd[flag][~flatflag], \
+                            yerru[flag][~flatflag]]), \
+                            color=colour[i], uplims=True)
+
+                    #eb[-1][0].set_linestyle('-.')
                     plt.scatter(snr[flag], tdiff[flag], marker=marker[j], \
                        s=20*size, c=colour[i])
                 if i == 2:
@@ -1368,7 +1398,7 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
                 plt.plot([max([SNRmin - 10, 0]), SNRmax + 5], \
                     [-tc - 100, -tc - 100], alpha=0.5, color=colour[i])
             else:
-                plt.plot([scalehisto, SNRmax*scalehisto + 50*scalehisto], \
+                plt.plot([0., SNRmax*scalehisto + 50*scalehisto], \
                     [-tc - 100, -tc - 100], alpha=0.5, color=colour[i])
             text_kwargs = dict(color=colour[i])
             if not plothisto:
@@ -1387,9 +1417,10 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
             plt.plot([0, SNRmax + 5], [0., 0.], 'k--')
             plt.xlim(max([SNRmin - 2, 0]), SNRmax + 1)
         else:
-            plt.plot([scalehisto, SNRmax*scalehisto + 100*scalehisto], \
+            plt.plot([0., SNRmax*scalehisto + 100*scalehisto], \
                         [0., 0.], 'k--')
-            plt.xlim(scalehisto, SNRmax*scalehisto + 300)
+            #plt.xlim(min(50., scalehisto), SNRmax*scalehisto + 100)
+            plt.xlim(200., SNRmax*scalehisto + 100)
         plt.ylim(-1000, 1000)
         if not plothisto:
             plt.xlabel('Occultation SNR', fontsize=16)
