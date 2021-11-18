@@ -186,7 +186,7 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
         #mags = [4.5]
     elif instrum == 'NIRSpec_Prism':
         #mags = np.linspace(10.5, 14.5, 5)
-        mags = np.array([13.5])
+        mags = np.array([14.5])
     if tstar == 5000:
         # Read all Josh's models, simulte only every other two
         tcontrast = np.arange(-1400, 0, 100)
@@ -245,195 +245,18 @@ def cycle(rplanet, rstar, tstar, loggstar, instrum, mags=[4.5], \
                         noscatter=noscatter, tight_ld_prior=tight_ld_prior, \
                         oldf2f1=oldf2f1, resume=resume, realization=realization)
 
-    if type_res == 4:
-        plot_res4(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
-    elif type_res == 5:
-        plot_res5(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
-    elif type_res == 6:
-        plot_res6(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
-    elif type_res == 7:
-        plot_res7(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior, \
+    elif type_res == 'size':
+        plot_res_size(ip, mags, tcontrast, models, \
+                    tight_ld_prior=tight_ld_prior)
+    elif type_res == 'true_vs_recovered':
+        plot_res_truevsrecovered(ip, mags, tcontrast, models, \
+                    tight_ld_prior=tight_ld_prior)
+    elif type_res == 'oc_vs_snr':
+        plot_res_ovc_vs_snr(ip, mags, tcontrast, models, \
+                    tight_ld_prior=tight_ld_prior, \
         noscatter=noscatter)
 
-    #plot_size(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
-    #plot_res2(ip, mags, tcontrast, models, fittype, chi2rplot=chi2rplot)
-    #plot_res3(ip, mags, tcontrast, models)
-    #plot_res5(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
-    #plot_res6(ip, mags, tcontrast, models, tight_ld_prior=tight_ld_prior)
-    #map_uncertainties(mags, tcontrast, ip)
-    #plot_unc_results(instrum, ip)
-
     plt.close('all')
-
-    return
-
-def plot_res(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
-    '''
-    Build a 2d plot containing stellar mag, t diff input as axes and
-    tdiff_output as color.
-    '''
-
-    #mag = 10.5
-    # Arrays for resolution. Here we are just renaming
-    if models == 'josh':
-        tcontrast = tcontrast[::3]
-    if inputpars['tstar'] == 3500:
-        tcontrast = np.arange(-900, 0, 300)
-        td = -600.
-        size = 3.
-    elif inputpars['tstar'] == 5000:
-        tcontrast = np.arange(-1200, 0, 300)
-        size = 5.
-        #td = -900.
-    ip = inputpars
-    xmag = mags
-    ytdiff = tcontrast
-    if chi2rplot:
-        xmag = [4.5]
-        ytdiff = [td]
-    tdiff_output = np.zeros((len(xmag), len(ytdiff)))
-    tdiff_unc = np.zeros(len(xmag))
-    sizes = np.arange(2, 6)
-    cc = ['g', 'r', 'b', 'm', 'c', 'y']
-    fig, ax = plt.subplots()#figsize=[12, 6])
-    axins = inset_axes(ax, width=3., height=3., loc=2)  #
-    # draw a bbox of the region of the inset axes in the parent axes and
-    # connecting lines between the bbox and the inset axes area
-    mark_inset(ax, axins, loc1=3, loc2=4, fc="none", ec="0.5")
-    plt.xticks(visible=False)
-    #plt.yticks(visible=False)
-    for mod in [models]:
-        for i, mag in enumerate(mags):
-        #for i, size in enumerate(sizes):
-            ii = np.copy(i)
-            i = 0
-            uncT = []
-            diffT = [] # This is for the 2D plot
-            for j, td in enumerate(tcontrast): #td
-                tumbra = ip['tstar'] + td
-                homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Projects/jwst_spots/revision2/'
-                instrument = ip['instrument'] + '/'
-                chains_folder = project_folder + instrument + 'star_' \
-                    + str(int(ip['tstar'])) + 'K/p' \
-                    + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
-                    + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
-                    + '_spot' + str(int(ip['tstar'] + td)) \
-                    + '_i' + str(int(ip['incl'])) \
-                    + '_a' + str(int(size)) \
-                    + '_theta' + str(int(ip['theta'])) \
-                    + '_mag' + str(mag) + '/MCMC/'
-                try:
-                    resfile = open(chains_folder + 'contrast_res_' \
-                            + mod + '_' + fittype + '.pic', 'rb')
-                    resdict = pickle.load(resfile)
-                    resfile.close()
-                    tbest = sorted(zip(resdict[mag][mod].items()), \
-                                    key=lambda x: x[0][1])[0][0][0]
-                    #tdiff_output[i, j] = -(td - tbest)/(ip['tstar'] + td)*100
-                    #tdiff_output_abs[i, j] = abs(td - tbest)/(ip['tstar'] + td)*100
-                    #tdiff_output[i, j] = -(td - tbest)
-                    #tdiff_output[ii, j] = resdict[mag]['Tunc'][0]
-                    #if tdiff_output[ii, j] < 0:
-                    #    tdiff_output[ii, j] /= resdict[mag]['Tunc'][1][0]
-                    #else:
-                    #    tdiff_output[ii, j] /= resdict[mag]['Tunc'][1][1]
-                    tdiff_output[ii, j] = resdict[mag]['Tunc'][1][1] \
-                                - resdict[mag]['Tunc'][1][0]
-                    #                - (ip['tstar'] + td)
-                    diffT.append(abs(resdict[mag]['Tunc'][4]))
-                    uncT.append(resdict[mag]['Tunc'][3])
-                    if np.isnan(tdiff_output[i, j]) \
-                                or tdiff_output[i, j] == np.inf:
-                        tdiff_output[i, j] = 10000
-                except FileNotFoundError:
-                    tdiff_output[i, j] = -999
-                if chi2rplot:
-                    chi2r = resdict[mag]['Tunc'][-2]
-                    #x, like = resdict[mag]['Tunc'][2], resdict[mag]['Tunc'][3]
-                    spotSNR = resdict[mag]['Tunc'][-1]
-                    print('Spot SNR = ', spotSNR)
-                    ax.plot(tcontrast[:-4], chi2r[:-4]/chi2r.min(), '.-', \
-                                label=str(mag), color=cc[ii])
-                                #label=str(round(spotSNR)), color=cc[ii], \
-                                #markersize=size*2)
-                    axins.plot(tcontrast[:-4], np.zeros(len(tcontrast[:-4])) \
-                                + 11.62/chi2r.min() + 1., color=cc[ii])
-                    axins.plot(tcontrast[:-4], chi2r[:-4]/chi2r.min(), '.-', \
-                                label=str(mag), color=cc[ii])
-                    ax.plot(x, like/like.max(), '.-', label=str(mag), \
-                                color=cc[ii])
-                    ax.plot([td, td], [0., 1.], 'k')
-                            #label=str(round(spotSNR)), color=cc[ii], \
-                            #markersize=size*2)
-            tdiff_unc[i] = np.mean(uncT)
-            #plt.figure(33)
-            #plt.plot(tcontrast, diffT, 'o-', c=cc[i], label=str(mag))
-        #plt.legend()
-        #plt.plot(tcontrast, np.zeros(len(tcontrast)) + 0.1, 'k--')
-        #plt.plot(tcontrast, np.zeros(len(tcontrast)) + 0.3, 'k--')
-        if chi2rplot:
-            ax.text(-1100, 7, r'True $T_\mathrm{spot} - T_\mathrm{star}$', \
-                            fontsize=14)
-            #axins.text(-1100, 1.6, '$99.7\%$ CI', fontsize=14)
-            ax.legend(frameon=False, loc='upper right', fontsize=14, \
-                        title='K mag', title_fontsize=14)
-            axins.plot([td, td], [0., 10.], 'k--')
-            #ax.text(-300., 28., 'K mag', fontsize=14)
-            x1, x2, y1, y2 = -1200., -100., 0.9, 3.
-            axins.yaxis.tick_right()
-            axins.set_xlim(x1, x2)
-            axins.set_ylim(y1, y2)
-            ax.set_xlabel(r'$T_\mathrm{spot} - T_\mathrm{star}$ [K]', fontsize=16)
-            #ax.set_ylabel('$\chi^2/\chi^2_\mathrm{min}$', fontsize=16)
-            ax.set_ylabel('$Likelihood$', fontsize=16)
-            ax.set_title(str(int(ip['tstar'])) + ' K star, ' \
-                    + str(int(ip['tstar'] + td)) + r' K spot, $\theta=$' \
-                    + str(int(ip['theta'])) + ' $\deg$, ' \
-                    + ip['instrument'].replace('_', ' '), fontsize=16)
-            plt.show()
-            plt.savefig(project_folder + instrument + 'star_' \
-                    + str(int(ip['tstar'])) + 'K/likelihood_map_' + mod + '_' + str(td) \
-                    #+ '_asizes' + str(int(ip['aumbra'])) \
-                    + '_theta' + str(int(ip['theta'])) + '.pdf')
-        plt.close('all')
-        fig = plt.figure()
-        ax = fig.add_axes([0.13, 0.13, 0.77, 0.77])
-        mm = ax.imshow(tdiff_output.T[::-1], extent=(min(xmag), \
-                    max(xmag) + np.diff(xmag)[0], \
-                    ip['tstar'] + ytdiff.min(), ip['tstar']), \
-                    # + ytdiff.max()),
-                    aspect='auto', \
-                    #vmin=0., vmax=1500,
-                    cmap=plt.get_cmap('plasma'))
-        ax.set_xticks(np.arange(min(xmag), max(xmag) + np.diff(xmag)[0], \
-                        np.diff(xmag)[0]))
-        ax.set_yticks(np.arange(ip['tstar'] + ytdiff.min(), \
-                        ip['tstar'], np.diff(ytdiff)[0]))
-        ax.grid(color='k')
-        ll = plt.colorbar(mappable=mm, ax=ax)
-        ll.set_label(r'Output $\Delta T_\bullet \, [K]$', fontsize=16)
-        ax.set_xlabel('$K$ mag', fontsize=16)
-        ax.set_ylabel(r'Input $T_\bullet$ [K]', fontsize=16)
-        plt.savefig(project_folder + instrument + 'star_' \
-                + str(int(ip['tstar'])) + 'K/accuracy_' + mod \
-                + '_a' + str(int(ip['aumbra'])) \
-                + '_theta' + str(int(ip['theta'])) + '.pdf')
-        #plt.subplot(212)#figure()
-        #frame2.plot(mags, tdiff_unc, 'ko-')
-        #frame2.set_xlabel('K mag', fontsize=16)
-        #frame2.set_ylabel(r'$\sigma(T_\mathrm{spot})$ [K]', fontsize=16)
-        #plt.show()
-        #plt.savefig(project_folder + instrument + 'star_' \
-        #        + str(int(ip['tstar'])) + 'K/accuracy_' + mod + '.pdf')
-
-        # Save uncertainty array
-        fout = open(project_folder + instrument + 'star_' \
-                + str(int(ip['tstar'])) + 'K/' + 'uncertainty_array_' \
-                + 'a' + str(int(ip['aumbra'])) \
-                + '_theta' + str(int(ip['theta'])) + '.pic', 'wb')
-        pickle.dump([mags, tdiff_unc], fout)
-        fout.close()
 
     return
 
@@ -466,33 +289,6 @@ def map_uncertainties(mags, tcontrast, ip):
 
     return
 
-def plot_unc_results(instrument, ip):
-    '''
-    Plot delta T spot results.
-    '''
-    homedir = os.path.expanduser('~')
-    colr = ['orange', 'royalblue']
-    tspot = [3500, 5000]
-    plt.figure()
-    for i, ti in enumerate(tspot):
-        filres = homedir + '/Projects/jwst_spots/revision2/' + instrument \
-                + '/star_' + str(ti) + 'K/uncertainty_array_' \
-                + 'a' + str(int(ip['aumbra'])) \
-                + '_theta' + str(int(ip['theta'])) + '.pic'
-        ff = pickle.load(open(filres, 'rb'))
-        plt.plot(ff[0], ff[1], 'o-', label=str(ti) + ' K', color=colr[i])
-    plt.legend(frameon=False, fontsize=12)
-    plt.xlabel('$K$ mag', fontsize=16)
-    plt.ylabel(r'$\sigma(T_\bullet)$ [K]', fontsize=16)
-    plt.title(instrument.replace('_', ' '), fontsize=16)
-    plt.show()
-    plt.savefig(homedir + '/Projects/jwst_spots/revision2/' + instrument \
-                + '/result_uncertainties_' + instrument + '_a' \
-                + str(int(ip['aumbra'])) \
-                + '_theta' + str(int(ip['theta'])) + '.pdf')
-
-    return
-
 def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=1):
     '''
     Ingest all stellar spectra needed for a given simulation (so you only have
@@ -503,7 +299,8 @@ def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=1):
 
     print('Ingesting stellar models...')
     josh_grid_folder = os.path.expanduser('~') \
-                                        + '/Projects/jwst_spots/josh_models/'
+                    + '/Projects/jwst_spots/josh_models/'
+
 
     # For star
     dict_starmodel = {}
@@ -553,130 +350,6 @@ def ingest_stellarspectra(tstar, tcontrast, loggstar, everymu=1):
             dict_spotmodels[tc]['spec'].append(np.array(spec))
 
     return dict_starmodel, dict_spotmodels
-
-def plot_res2(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
-    '''
-    Build a 2d plot containing stellar mag, t diff input as axes and
-    tdiff_output as color.
-    '''
-
-    #mag = 10.5
-    # Arrays for resolution. Here we are just renaming
-    if models == 'josh':
-        tcontrast = tcontrast[::3]
-    if inputpars['tstar'] == 3500:
-        tcontrast = np.arange(-900, 0, 300)
-        td = -600.
-        size = 3.
-    elif inputpars['tstar'] == 5000:
-        tcontrast = np.arange(-1200, 0, 300)
-        size = 5.
-        #td = -1200.
-    ip = inputpars
-    xmag = mags
-    ytdiff = tcontrast
-    #if chi2rplot:
-    #    xmag = [4.5]
-    #    ytdiff = [td]
-    tdiff_output = np.zeros((len(xmag), len(ytdiff)))
-    tdiff_unc = np.zeros(len(xmag))
-    sizes = np.arange(2, 6)
-    cc = ['g', 'r', 'b', 'm', 'c', 'y']
-    #axins = inset_axes(ax, width=3., height=3., loc=2)  #
-    # draw a bbox of the region of the inset axes in the parent axes and
-    # connecting lines between the bbox and the inset axes area
-    #mark_inset(ax, axins, loc1=3, loc2=4, fc="none", ec="0.5")
-    #plt.xticks(visible=False)
-    #plt.yticks(visible=False)
-    for mod in [models]:
-        for j, td in enumerate(tcontrast): #td
-            fig, ax = plt.subplots()#figsize=[12, 6])
-            #for i, size in enumerate(sizes):
-            uncT = []
-            diffT = [] # This is for the 2D plot
-            for i, mag in enumerate(mags):
-                ii = np.copy(i)
-                i = 0
-                tumbra = ip['tstar'] + td
-                homedir = os.path.expanduser('~')
-                project_folder = homedir + '/Projects/jwst_spots/revision2/'
-                instrument = ip['instrument'] + '/'
-                chains_folder = project_folder + instrument + 'star_' \
-                    + str(int(ip['tstar'])) + 'K/p' \
-                    + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
-                    + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
-                    + '_spot' + str(int(ip['tstar'] + td)) \
-                    + '_i' + str(int(ip['incl'])) \
-                    + '_a' + str(int(size)) \
-                    + '_theta' + str(int(ip['theta'])) \
-                    + '_mag' + str(mag) + '/MCMC/'
-                try:
-                    resfile = open(chains_folder + 'contrast_res_' \
-                            + mod + '_' + fittype + '.pic', 'rb')
-                    resdict = pickle.load(resfile)
-                    resfile.close()
-                    tbest = sorted(zip(resdict[mag][mod].items()), \
-                                    key=lambda x: x[0][1])[0][0][0]
-                    #tdiff_output[i, j] = -(td - tbest)/(ip['tstar'] + td)*100
-                    #tdiff_output_abs[i, j] = abs(td - tbest)/(ip['tstar'] + td)*100
-                    #tdiff_output[i, j] = -(td - tbest)
-                    #tdiff_output[ii, j] = resdict[mag]['Tunc'][0]
-                    #if tdiff_output[ii, j] < 0:
-                    #    tdiff_output[ii, j] /= resdict[mag]['Tunc'][1][0]
-                    #else:
-                    #    tdiff_output[ii, j] /= resdict[mag]['Tunc'][1][1]
-                    tdiff_output[ii, j] = resdict[mag]['Tunc'][1][1] \
-                                - resdict[mag]['Tunc'][1][0]
-                    #                - (ip['tstar'] + td)
-                    diffT.append(abs(resdict[mag]['Tunc'][4]))
-                    uncT.append(resdict[mag]['Tunc'][3])
-                    if np.isnan(tdiff_output[i, j]) \
-                                or tdiff_output[i, j] == np.inf:
-                        tdiff_output[i, j] = 10000
-                except FileNotFoundError:
-                    tdiff_output[i, j] = -999
-                if chi2rplot:
-                    #chi2r = resdict[mag]['Tunc'][-2]
-                    x, like = resdict[mag]['Tunc'][2], resdict[mag]['Tunc'][3]
-                    #like = -2.*np.log(like)
-                    spotSNR = resdict[mag]['Tunc'][-1]
-                    print('Spot SNR = ', spotSNR)
-                    ax.plot(x, like/like.max(), '.-', label=str(mag), \
-                                    color=cc[ii])
-                    ax.plot([td, td], [0., 1.], 'k')
-                            #label=str(round(spotSNR)), color=cc[ii], \
-                            #markersize=size*2)
-            #tdiff_unc[i] = np.mean(uncT)
-            #plt.figure(33)
-            #plt.plot(tcontrast, diffT, 'o-', c=cc[i], label=str(mag))
-            #ax.text(-1100, 7, r'True $T_\mathrm{spot} - T_\mathrm{star}$', \
-            #                fontsize=[14])
-            #axins.text(-1100, 1.6, '$99.7\%$ CI', fontsize=14)
-            ax.legend(frameon=False, loc='best', fontsize=14, \
-                        title='K mag', title_fontsize=14)
-            #axins.plot([td, td], [0., 10.], 'k--')
-            #ax.text(-300., 28., 'K mag', fontsize=14)
-            #x1, x2, y1, y2 = -1200., -100., 0.9, 3.
-            #axins.yaxis.tick_right()
-            #ax.set_ylim(0, 5)
-            #axins.set_ylim(y1, y2)
-            ax.set_xlabel(r'$T_\mathrm{spot} - T_\mathrm{star}$ [K]', fontsize=16)
-            #ax.set_ylabel('$\chi^2/\chi^2_\mathrm{min}$', fontsize=16)
-            ax.set_ylabel('$\mathcal{L}/\mathcal{L}_\mathrm{max}$', fontsize=16)
-            #ax.set_ylabel('$\mathcal{L}$', fontsize=16)
-            ax.set_title(str(int(ip['tstar'])) + ' K star, ' \
-                    + str(int(ip['tstar'] + td)) + r' K spot, $\theta=$' \
-                    + str(int(ip['theta'])) + ' $\deg$, ' \
-                    + ip['instrument'].replace('_', ' '), fontsize=16)
-            plt.savefig(project_folder + instrument + 'star_' \
-                    + str(int(ip['tstar'])) + 'K/likelihood_map_' \
-                    + ip['instrument'] \
-                    + '_' + mod + '_' + str(ip['tstar']) + '_' + str(td) \
-                    #+ '_asizes' + str(int(ip['aumbra'])) \
-                    + '_theta' + str(int(ip['theta'])) + '.pdf')
-            plt.close('all')
-
-    return
 
 def plot_size(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
     '''
@@ -804,197 +477,8 @@ def plot_size(inputpars, mags, tcontrast, models, fittype, chi2rplot=False):
 
     return
 
-def plot_res3(ip, mags, tcontrast, models, fittype='LM'):
-    '''
-    Represent the results of the LM fits.
-    '''
-
-    plt.close('all')
-    tcontrast = tcontrast[::3]
-    tdiff_output = np.zeros((len(mags), len(tcontrast)))
-    ffact_map = np.zeros((len(mags), len(tcontrast)))
-    betaplanet = np.zeros((len(mags), len(tcontrast)))
-    if ip['tstar'] == 5000:
-        size = 5
-    elif ip['tstar'] == 3500.:
-        size = 3
-    #fig, ax = plt.subplots()
-    for i, mag in enumerate(mags):
-        sizes = []
-        for j, td in enumerate(tcontrast): #td
-            #for i, size in enumerate(sizes):
-            uncT = []
-            diffT = [] # This is for the 2D plot
-            tumbra = ip['tstar'] + td
-            homedir = os.path.expanduser('~')
-            project_folder = homedir + '/Projects/jwst_spots/revision2/'
-            instrument = ip['instrument'] + '/'
-            chains_folder = project_folder + instrument + 'star_' \
-                + str(int(ip['tstar'])) + 'K/p' \
-                + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
-                + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
-                + '_spot' + str(int(ip['tstar'] + td)) \
-                + '_i' + str(int(ip['incl'])) \
-                + '_a' + str(int(size)) \
-                + '_theta' + str(int(ip['theta'])) \
-                + '_mag' + str(mag) + '/MCMC/'
-            resfile = open(chains_folder \
-                        + 'contrast_LMfit_josh_jwst.pic', 'rb')
-            resdict = pickle.load(resfile)
-            resfile.close()
-            tdiff_output[i, j] = resdict[0].x[0] - tumbra
-                                    #resdict[0].params['Tspot'] - tumbra
-            #ffact_map[i, j] = resdict[0].params['delta']
-            betaplanet[i, j] = resdict[0].x[1]#.params['beta']
-            sizes.append(resdict[1])
-        plt.plot(tcontrast, sizes, 'o-', label=str(mag))
-    plt.xlabel(r'$T_\bullet - T_\star$', fontsize=16)
-    plt.ylabel('Minimum spot size [deg]', fontsize=16)
-    plt.legend(title='K mag', title_fontsize=14, frameon=False)
-    plt.savefig(project_folder + instrument + 'star_' \
-            + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-            + '_spotsize_a' + str(int(ip['aumbra'])) \
-            + '_theta' + str(int(ip['theta'])) + '.pdf')
-
-    plt.close('all')
-
-    labels = [r'Output $\Delta T_\bullet$ [K]', r'$\beta$']#, r'$\delta$']
-    outname = ['Tspot', 'beta']#, 'delta']
-    for k, tab in enumerate([tdiff_output, betaplanet]):#, ffact_map]):
-        fig = plt.figure()
-        ax = fig.add_axes([0.13, 0.13, 0.77, 0.77])
-        mm = ax.imshow(tab.T[::-1], extent=(min(mags), \
-                    max(mags) + np.diff(mags)[0], \
-                    ip['tstar'] + tcontrast.min(), ip['tstar']), \
-                    # + ytdiff.max()),
-                    aspect='auto', \
-                    #vmin=0., vmax=1500,
-                    cmap=plt.get_cmap('plasma'))
-        ax.set_xticks(np.arange(min(mags), max(mags) + np.diff(mags)[0], \
-                        np.diff(mags)[0]))
-        ax.set_yticks(np.arange(ip['tstar'] + tcontrast.min(), \
-                        ip['tstar'], np.diff(tcontrast)[0]))
-        ax.grid(color='k')
-        ll = plt.colorbar(mappable=mm, ax=ax)
-        ll.set_label(labels[k], fontsize=16)
-        ax.set_xlabel('$K$ mag', fontsize=16)
-        ax.set_ylabel(r'Input $T_\bullet$ [K]', fontsize=16)
-        ax.set_title(str(instrument).replace('_', ' ').replace('/', '') \
-                + ', ' + str(int(ip['tstar'])) + ' K star,' \
-                + r' $\theta =$' + str(int(ip['theta'])) + '$^\circ$', \
-                    fontsize=16)
-        plt.savefig(project_folder + instrument + 'star_' \
-                + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-                + '_map_' \
-                + outname[k] + '_a' + str(int(ip['aumbra'])) \
-                + '_theta' + str(int(ip['theta'])) + '.pdf')
-
-    plt.close('all')
-
-    return
-
-def plot_res4(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
-
-    plt.close('all')
-    tcontrast = tcontrast[::3]
-    #tdiff_output = np.zeros((len(mags), len(tcontrast)))
-    #ffact_map = np.zeros((len(mags), len(tcontrast)))
-    #betaplanet = np.zeros((len(mags), len(tcontrast)))
-    if ip['tstar'] == 5000:
-        size = 3
-    elif ip['tstar'] == 3500.:
-        size = 3
-
-    if tight_ld_prior:
-        ldpart = '_tightLD'
-    else:
-        ldpart = ''
-
-    #fig, ax = plt.subplots()
-    marker = ['o', '*', '^', 's', 'x']
-    colour = ['g', 'r', 'c', 'y', 'brown']
-    for i, mag in enumerate(mags):
-        sizes = []
-        for j, td in enumerate(tcontrast): #td
-            #for i, size in enumerate(sizes):
-            uncT = []
-            diffT = [] # This is for the 2D plot
-            tumbra = ip['tstar'] + td
-            homedir = os.path.expanduser('~')
-            project_folder = homedir + '/Projects/jwst_spots/revision2/'
-            instrument = ip['instrument'] + '/'
-            chains_folder = project_folder + instrument + 'star_' \
-                + str(int(ip['tstar'])) + 'K/p' \
-                + str(ip['rplanet']) + '_star' + str(ip['rstar']) + '_' \
-                + str(int(ip['tstar'])) + '_' + str(ip['loggstar']) \
-                + '_spot' + str(int(ip['tstar'] + td)) \
-                + '_i' + str(int(ip['incl'])) \
-                + '_a' + str(int(size)) \
-                + '_theta' + str(int(ip['theta'])) \
-                + '_mag' + str(mag) + ldpart + '/MCMC/'
-            #resfile = open(chains_folder + 'chains_spec.pic', 'rb')
-            resfile = open(chains_folder + 'nested_spec.pic', 'rb')
-            resdict = pickle.load(resfile)
-            resfile.close()
-            #tspot_chain = resdict['Chains'][:, 0]
-            #percentiles = np.percentile(tspot_chain, [15.9, 50., 84.1])
-
-            # Quantiles
-            planet_angle = ip['rplanet']*0.1005/ip['rstar']
-            samples = resdict.samples  # samples
-            flag = samples[:, 1] <= 1.
-            samples = samples[flag]
-            weights = np.exp(resdict.logwt - resdict.logz[-1])[flag]  # normalized weights
-            quantiles = [dyfunc.quantile(samps, [0.159, 0.50, 0.841], \
-                        weights=weights) for samps in samples.T]
-            #quantiles = [dyfunc.quantile(samps, [0.05, 0.50, 0.95], \
-            #            weights=weights) for samps in samples.T]
-
-            yerrup = np.diff(quantiles[0])[1]
-            yerrdown = np.diff(quantiles[0])[0]
-            toutput = quantiles[0][1]
-
-            if instrument == 'NIRSpec_Prism/':
-                errup = np.sqrt(yerrup**2)# + 79.**2)
-                errdown = np.sqrt(yerrdown**2)# + 79.**2)
-            elif instrument == 'NIRCam/':
-                errup = np.sqrt(yerrup**2)# + 62.**2)
-                errdown = np.sqrt(yerrdown**2)# + 62.**2)
-            if j == 0:
-                plt.scatter(-(ip['tstar'] - tumbra) + i*20, \
-                    -(ip['tstar'] - toutput), marker=marker[i], s=100, \
-                    c=colour[i], label='{}'.format(mag))
-            else:
-                plt.scatter(-(ip['tstar'] - tumbra) + i*20, \
-                    -(ip['tstar'] - toutput), marker=marker[i], s=100, \
-                    c=colour[i])
-            plt.errorbar(-(ip['tstar'] - tumbra) + i*20, \
-                    -(ip['tstar'] - toutput), yerr=([errdown], [errup]), \
-                    fmt='-', color=colour[i], capsize=2)
-
-    plt.xlabel(r'True $T_\bullet - T_\star$ [K]', fontsize=16)
-    plt.ylabel(r'Recovered $T_\bullet - T_\star$ [K]', fontsize=16)
-    plt.legend(title='K mag', title_fontsize=14, frameon=False)
-    plt.title('{}'.format(int(ip['tstar'])) + ' K star, ' \
-                + instrument.replace('/', '').replace('_', ' ') \
-                + r', $\theta={}^\circ$'.format(int(ip['theta'])), fontsize=16)
-    if ip['tstar'] == 5000:
-        xx = -(ip['tstar'] - np.linspace(3800., 5000., 100))
-        plt.xlim(-1300., -100)
-    elif ip['tstar'] == 3500.:
-        xx = -(ip['tstar'] - np.linspace(2300., 3500., 100))
-        plt.xlim(-1000, -100)
-    plt.plot(xx, xx, 'k--')
-    plt.tight_layout()
-    plt.savefig(project_folder + instrument + 'star_' \
-            + str(int(ip['tstar'])) + 'K/' + instrument.replace('/', '') \
-            + '_' + str(int(ip['tstar'])) + '_a' + str(int(ip['aumbra'])) \
-            + '_theta' + str(int(ip['theta'])) + '_Tscatter.pdf')
-    plt.close('all')
-
-    return
-
-def plot_res5(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
+def plot_res_size(ip, mags, tcontrast, models, fittype='LM', \
+            tight_ld_prior=True):
 
     plt.close('all')
     aumbras = np.arange(2, 6)
@@ -1090,8 +574,8 @@ def plot_res5(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True):
 
     return
 
-def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
-            tight_ld_prior=True):
+def plot_res_truevsrecovered(ip, mags, tcontrast, models, fittype='LM', \
+            tight_layout=True, tight_ld_prior=True):
 
     instrument = ip['instrument'] + '/'
 
@@ -1195,8 +679,8 @@ def plot_res6(ip, mags, tcontrast, models, fittype='LM', tight_layout=True, \
 
     return
 
-def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
-        noscatter=False, scalehisto=100):
+def plot_res_ovc_vs_snr(ip, mags, tcontrast, models, fittype='LM', \
+        tight_ld_prior=True, noscatter=False, scalehisto=100):
 
     #aumbras = np.arange(2, 6)
     plothistos = [True, False]
@@ -1458,8 +942,8 @@ def plot_res7(ip, mags, tcontrast, models, fittype='LM', tight_ld_prior=True, \
 
 
 def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
-        tight_ld_prior=True, onlyres=False, oldf2f1=False, typeres=7, \
-        realization=0):
+        tight_ld_prior=True, onlyres=False, oldf2f1=False, \
+        typeres='true_vs_recovered', realization=0):
     '''
     Parameters
     ----------
@@ -1497,8 +981,8 @@ def main2(spotsize, instruments, thetas, stars, latspot=0., noscatter=False, \
                     inputpars['aumbra'] = spotsize
                     inputpars['latspot'] = latspot
                     cycle(rp, rs, ts, logg, instrum, \
-                        simulate_transits=False, fit_transits=False, \
-                        fit_spectra=True, spotted_starmodel=False, \
+                        simulate_transits=False, fit_transits=True, \
+                        fit_spectra=False, spotted_starmodel=False, \
                         inputpars=inputpars, update=False, chi2rplot=True, \
                         model='batman', noscatter=noscatter, \
                         tight_ld_prior=tight_ld_prior, onlyres=onlyres, \
@@ -1534,8 +1018,8 @@ def main(tstar, instrument, theta, spotsize, latspot, outfile):
         rplanet = 0.25
         loggstar = 5.0
     cycle(rplanet, rstar, tstar, loggstar, instrument, \
-            simulate_transits=True, fit_transits=True, \
-            fit_spectra=True, spotted_starmodel=False, \
+            simulate_transits=False, fit_transits=True, \
+            fit_spectra=False, spotted_starmodel=False, \
             inputpars=inputpars, update=False, chi2rplot=True, model='batman', \
             tight_ld_prior=True, noscatter=True, resume=False)
 

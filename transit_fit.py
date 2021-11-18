@@ -346,8 +346,8 @@ def transit_emcee(diz, ind, bestbin, ldlist, model='KSint', \
         if ind == bestbin:
             titles = [r'$R_\mathrm{p}/R_\star$', r'$u_1$', r'$u_2$', \
                     r'$r_0$', r'$r_1$', r'$r_2$', \
-                    r'$\Delta f$', r'$n$', r'$w_\mathrm{spot}$', \
-                    '$t_\mathrm{spot}$', r'$i$', '$t_\mathrm{tr}$']
+                    r'$\Delta f$', r'$n$', r'$w$', \
+                    r'$t_\bullet$', r'$i$', '$t_\mathrm{tr}$']
             modeltype = 'fitt0'
             nlive = 200
         else:

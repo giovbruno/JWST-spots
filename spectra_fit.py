@@ -905,7 +905,8 @@ def compare_contrast_spectra(tstar, loggstar, tspot, modgrid, mu=-1, \
                     + '-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits')[0].data
     elif modgrid == 'josh':
         josh_grid_folder = os.path.expanduser('~') \
-                                        + '/Projects/jwst_spots/josh_models/'
+                        + '/Projects/jwst_spots/phoenix_models_upload/'
+                        #                + '/Projects/jwst_spots/josh_models/'
         tstar_ = format(tstar, '2.2e')
         loggstar_ = format(loggstar, '2.2e')
         filename = josh_grid_folder + 'starspots.teff=' \
